@@ -129,11 +129,9 @@ class ApiClient:
         self, request: RequestDefinition, headers: dict[str, str]
     ) -> ApiResponse:
         last_exception: Exception | None = None
-        logger.info(
-            f"Executing request to {request.url} with retries up to {self._max_retries}"
-        )
         for attempt in range(self._max_retries):
             try:
+                logger.debug(f"Attempt {attempt + 1} for request to {request.url}")
                 response = await self._make_request(request, headers)
 
                 if response.is_rate_limited:

@@ -235,6 +235,9 @@ class WorkspaceSyncService:
             avatar_url=user.avatar_url,
             raw_data=user.raw_data,
         )
+        logger.debug(
+            f"Upserting user: {user.email} with provider ID: {user.provider_id}"
+        )
         await self._user_repo.upsert(dto)
 
     async def _upsert_workspace_group(
@@ -252,6 +255,9 @@ class WorkspaceSyncService:
             direct_members_count=group.direct_members_count,
             raw_data=group.raw_data,
         )
+        logger.debug(
+            f"Upserting group: {group.email} with provider ID: {group.provider_id}"
+        )
         await self._group_repo.upsert(dto)
 
     async def _upsert_group_membership(
@@ -264,8 +270,13 @@ class WorkspaceSyncService:
             organization_id, membership.user_provider_id
         )
         if not user:
+            logger.debug(
+                f"User not found for group membership: {membership.user_provider_id}"
+            )
             return
-
+        logger.debug(
+            f"Upserting group membership: user_id={user.id}, group_id={group_id}, role={membership.role}"
+        )
         dto = CreateGroupMembershipDTO(
             workspace_user_id=user.id,
             workspace_group_id=group_id,
@@ -282,6 +293,7 @@ class WorkspaceSyncService:
             connection.organization_id, event.user_email
         )
         if not user:
+            logger.debug(f"User not found for token event: {event.user_email}")
             return
 
         app = await self._upsert_discovered_app(connection, event)
@@ -299,7 +311,9 @@ class WorkspaceSyncService:
         event: UnifiedTokenEvent,
     ):
         event_time = event.event_time or datetime.now(timezone.utc)
-
+        logger.debug(
+            f"Upserting discovered app: {event.app_name} for connection: {connection.id}"
+        )
         dto = CreateDiscoveredAppDTO(
             organization_id=connection.organization_id,
             connection_id=connection.id,
@@ -321,7 +335,9 @@ class WorkspaceSyncService:
         event: UnifiedTokenEvent,
     ) -> None:
         event_time = event.event_time or datetime.now(timezone.utc)
-
+        logger.debug(
+            f"Upserting app authorization for app_id: {app_id}, user_id: {user_id}"
+        )
         dto = CreateAppAuthorizationDTO(
             discovered_app_id=app_id,
             workspace_user_id=user_id,
