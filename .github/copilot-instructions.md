@@ -12,15 +12,37 @@ Each folder has a strict purpose and **must not** take responsibilities outside 
 
 ```
 app/
-├── api/              # Controllers (FastAPI routers)
-├── constants/        # Enums & static constants
-├── core/             # Settings, security, logging
-├── dtos/             # Internal data transfer objects (Create/Update only)
-├── models/           # Database entity models (Pydantic)
-├── repositories/     # Database access layer
-├── schemas/          # Pydantic request/response models (API contracts)
-├── services/         # Business logic layer
-└── utils/            # Shared utilities
+├── api/
+│   ├── __init__.py
+│   └── v1/
+│       ├── __init__.py
+│       ├── users.py              # Routes for /users
+│       └── organizations.py      # Routes for /organizations
+│
+├── schemas/                      # EXTERNAL (API JSON bodies)
+│   ├── __init__.py
+│   ├── users.py                  # Contains: UserLoginReq, UserResponse
+│   └── organizations.py          # Contains: OrgSearchReq, OrgResponse
+│
+├── dtos/                         # INTERNAL (Service -> Repo objects)
+│   ├── __init__.py
+│   ├── users.py                  # Contains: UserCreateDTO, UserUpdateDTO
+│   └── organizations.py          # Contains: OrgCreateDTO, OrgUpdateDTO
+│
+├── services/                     # BUSINESS LOGIC
+│   ├── __init__.py
+│   ├── user_service.py           # Logic for Users
+│   └── organization_service.py   # Logic for Organizations
+│
+├── repositories/                 # DATABASE QUERIES
+│   ├── __init__.py
+│   ├── user_repo.py              # SQL/Mongo queries for Users
+│   └── organization_repo.py      # SQL/Mongo queries for Orgs
+│
+├── models/                       # DATABASE TABLES
+│   ├── __init__.py
+│   ├── users.py                  # DB Table definition for 'users'
+│   └── organizations.py          # DB Table definition for 'organizations'
 ```
 
 ---
@@ -61,15 +83,19 @@ app/
 * Used only for **external API input/output**.
 * Never imported by repository or model layers.
 * Defines strict types for controllers (Request/Response shapes).
+* Structure: One file per domain. (e.g., schemas/user_schema.py should contain UserCreateSchema, UserUpdateSchema, and UserResponseSchema).
 
 ---
 
 ### **`dtos/` – Internal Data Transfer Objects**
 
-* Contains only **Create** and **Update** DTOs.
-* Used for passing data from services to repositories.
-* Lightweight Pydantic models for internal communication.
-* Do NOT put database entity representations here (use `models/` instead).
+* Scope: Contains Create, Update, and Complex Read (Joined) DTOs.
+* Usage: Used for bidirectional data transfer between Services and Repositories.
+* Format: Lightweight Pydantic models.
+* Structure: One file per domain (e.g., dtos/users.py contains UserCreateDTO, UserUpdateDTO, UserWithGroupDTO).
+* The Join Rule:
+ a. If a Repository returns a standard table row → Return the model/ (Entity).
+ b. If a Repository returns a JOIN or Aggregate (e.g., User + Org Name) → Return a Read DTO (e.g., UserWithOrgDTO). Do not force joined data into Entity models.
 
 ---
 
@@ -105,10 +131,8 @@ Avoid business rules here.
 
 * Small, pure helper functions.
 * Must be stateless and reusable.
-* Not domain-specific.
 
 ---
-
 
 ### **Dependency Injection (DI) & Wiring**
 
@@ -159,6 +183,7 @@ class UserService:
   * Must never import or instantiate Repositories directly.
   * Must inject the fully assembled Service using `Depends`.
   * Must never handle database connections (`async with` blocks) directly.
+  * Separate classes for each controller/router are a Must. Eg: `user_routes`, `organization_routes`, etc.
 
 ```python
 # Correct Controller Pattern
@@ -206,8 +231,8 @@ async def create_user(
 ```json
 {
   "meta": {
-    "request_id": "01F9XYZ...abc",
-    "timestamp": "2025-11-20T11:00:00Z"
+    "request_id": "UUID",
+    "timestamp": "2025-12-01T00:00:00Z"
   },
   "data": null,
   "error": {
@@ -222,7 +247,7 @@ async def create_user(
       },
       {
         "code": "INVALID_FORMAT",
-        "field": "date_of_birth",
+        "field": "date",
         "message": "Date must be in YYYY-MM-DD format."
       }
     ]
@@ -252,6 +277,29 @@ Small, focused units over large multi-purpose functions.
 
 * Prefer small helper functions over large procedural blocks.
 * Avoid duplicated logic — move shared behavior into **utils/** or **services/**.
+
+### Parameter Passing Guidelines
+1.  **The "Scope + Params" Rule (For Lists/Search)**
+    * **Mandatory Scoping IDs** (e.g., `organization_id`) must be passed as explicit arguments to enforce security boundaries.
+    * **Filters & Pagination** must be wrapped in a single Pydantic object (e.g., `UserFilterParams`) to avoid "argument soup."
+    ```python
+    #  Correct
+    def get_users(org_id: int, params: UserFilterParams)
+
+    #  Incorrect
+    def get_users(org_id: int, page: int, size: int, search: str)
+    ```
+
+2. **The "DTO Wrapper" Rule (For Mutations)**
+   * Create/Update operations should accept a single DTO object containing the payload.
+   * Never pass individual fields for creation logic.
+   ```python
+          #  Correct
+        def create_user(org_id: int, payload: UserCreateDTO)
+        #  Avoid
+        def create_user(org_id: int, email: str, name: str, password: str, ...)
+    ```
+
 
 ### OOPS principles
 * Use classes to encapsulate related behavior and data.
@@ -359,7 +407,6 @@ Caller must use it like this:
 * Use meaningful Variables names. Must not use generic names like `data`, `info`, `item`.
 * Do not provide any doc strings, the function and variable names should be self explanatory.
 
----
 
 ### **Logging**
 
@@ -367,23 +414,44 @@ Caller must use it like this:
 * Services must log key decision points.
 * Avoid printing or ad-hoc logs.
 
----
 
 ### **Error Handling**
 
 * Raise custom exceptions from **services/**.
 * Controllers convert them into proper HTTP responses.
 
----
 
 ### Common Python Practices:
 * Use datetime.now(timezone.utc) for UTC timestamps.
 * Use f-strings for logging and messages.
 * Use async/await for all I/O operations.
 
-#  **6. What You Must Not Do**
+---
+# **6. Performance Considerations**
+* Use async database calls (asyncpg).
+* Avoid N+1 query problems in repositories. 
+  ```python
+    users = db.query("SELECT * FROM users")
+    for user in users:
+        #  TRIGGERS 1 QUERY PER USER
+        orders = db.query(f"SELECT * FROM orders WHERE user_id = {user.id}")
+  ```
+  ```sql
+      -- Fetch everything in one go
+    SELECT u.name, o.order_date
+    FROM users u
+    JOIN orders o ON u.id = o.user_id;
+  ``` 
+* Checking for existence
+  ```sql
+      SELECT 1 FROM users WHERE email = 'test@example.com' LIMIT 1;
+  -- Application logic: if result is not null then True
+  ```
 
-* Do not place business logic in controllers
+---
+#  **7. What You Must Not Do**
+
+* Do not place business logic in routes/controllers
 * Do not run SQL inside services
 * Do not import API schemas inside repositories
 * Do not return ORM models directly to clients
