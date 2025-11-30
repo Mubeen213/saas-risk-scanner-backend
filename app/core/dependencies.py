@@ -14,13 +14,13 @@ from app.models.user import User
 from app.oauth.service import OAuthService
 from app.repositories.app_authorization_repository import AppAuthorizationRepository
 from app.repositories.discovered_app_repository import DiscoveredAppRepository
-from app.repositories.org_provider_connection_repository import (
-    OrgProviderConnectionRepository,
+from app.repositories.identity_provider_connection_repository import (
+    IdentityProviderConnectionRepository,
 )
+from app.repositories.identity_provider_repository import IdentityProviderRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.plan_repository import PlanRepository
 from app.repositories.product_auth_config_repository import ProductAuthConfigRepository
-from app.repositories.provider_repository import ProviderRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.workspace_group_repository import WorkspaceGroupRepository
@@ -41,10 +41,10 @@ async def get_db_session() -> AsyncGenerator[asyncpg.Connection, None]:
         yield conn
 
 
-def get_provider_repository(
+def get_identity_provider_repository(
     conn: asyncpg.Connection = Depends(get_db_session),
-) -> ProviderRepository:
-    return ProviderRepository(conn)
+) -> IdentityProviderRepository:
+    return IdentityProviderRepository(conn)
 
 
 def get_product_auth_config_repository(
@@ -53,10 +53,10 @@ def get_product_auth_config_repository(
     return ProductAuthConfigRepository(conn)
 
 
-def get_org_provider_connection_repository(
+def get_identity_provider_connection_repository(
     conn: asyncpg.Connection = Depends(get_db_session),
-) -> OrgProviderConnectionRepository:
-    return OrgProviderConnectionRepository(conn)
+) -> IdentityProviderConnectionRepository:
+    return IdentityProviderConnectionRepository(conn)
 
 
 def get_workspace_user_repository(
@@ -108,22 +108,26 @@ def get_role_repository(
 
 
 def get_credentials_manager(
-    conn: asyncpg.Connection = Depends(get_db_session),
+    connection_repository: IdentityProviderConnectionRepository = Depends(
+        get_identity_provider_connection_repository
+    ),
 ) -> CredentialsManager:
-    return CredentialsManager(conn, settings.encryption_key)
+    return CredentialsManager(connection_repository, settings.encryption_key)
 
 
 def get_integration_service(
-    provider_repository: ProviderRepository = Depends(get_provider_repository),
+    identity_provider_repository: IdentityProviderRepository = Depends(
+        get_identity_provider_repository
+    ),
     product_auth_config_repository: ProductAuthConfigRepository = Depends(
         get_product_auth_config_repository
     ),
-    connection_repository: OrgProviderConnectionRepository = Depends(
-        get_org_provider_connection_repository
+    connection_repository: IdentityProviderConnectionRepository = Depends(
+        get_identity_provider_connection_repository
     ),
 ) -> IntegrationService:
     return IntegrationService(
-        provider_repository=provider_repository,
+        identity_provider_repository=identity_provider_repository,
         product_auth_config_repository=product_auth_config_repository,
         connection_repository=connection_repository,
         encryption_key=settings.encryption_key,
@@ -131,10 +135,12 @@ def get_integration_service(
 
 
 def get_workspace_sync_service(
-    connection_repository: OrgProviderConnectionRepository = Depends(
-        get_org_provider_connection_repository
+    connection_repository: IdentityProviderConnectionRepository = Depends(
+        get_identity_provider_connection_repository
     ),
-    provider_repository: ProviderRepository = Depends(get_provider_repository),
+    identity_provider_repository: IdentityProviderRepository = Depends(
+        get_identity_provider_repository
+    ),
     auth_config_repository: ProductAuthConfigRepository = Depends(
         get_product_auth_config_repository
     ),
@@ -154,7 +160,7 @@ def get_workspace_sync_service(
 ) -> WorkspaceSyncService:
     return WorkspaceSyncService(
         connection_repository=connection_repository,
-        provider_repository=provider_repository,
+        identity_provider_repository=identity_provider_repository,
         auth_config_repository=auth_config_repository,
         workspace_user_repository=workspace_user_repository,
         workspace_group_repository=workspace_group_repository,
@@ -169,13 +175,15 @@ def get_domain_validator_service() -> DomainValidatorService:
 
 
 def get_oauth_service(
-    provider_repository: ProviderRepository = Depends(get_provider_repository),
+    identity_provider_repository: IdentityProviderRepository = Depends(
+        get_identity_provider_repository
+    ),
     product_auth_config_repository: ProductAuthConfigRepository = Depends(
         get_product_auth_config_repository
     ),
 ) -> OAuthService:
     return OAuthService(
-        provider_repository=provider_repository,
+        identity_provider_repository=identity_provider_repository,
         product_auth_config_repository=product_auth_config_repository,
     )
 

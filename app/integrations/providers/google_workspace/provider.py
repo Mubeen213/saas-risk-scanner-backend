@@ -144,7 +144,7 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
             async for raw_users in client.execute_paginated(
                 request, auth_context, paginator
             ):
-                logger.debug("Fetched batch of %d users", len(raw_users))
+                logger.debug(f"Fetched batch of {len(raw_users)} users")
                 yield adapt_google_users(raw_users)
         logger.debug("Finished fetching users from Google Workspace")
 
@@ -159,14 +159,14 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
             async for raw_groups in client.execute_paginated(
                 request, auth_context, paginator
             ):
-                logger.debug("Fetched batch of %d groups", len(raw_groups))
+                logger.debug(f"Fetched batch of {len(raw_groups)} groups")
                 yield adapt_google_groups(raw_groups)
         logger.debug("Finished fetching groups from Google Workspace")
 
     async def fetch_group_members(
         self, auth_context: AuthContext, group_id: str
     ) -> AsyncGenerator[list[UnifiedGroupMembership], None]:
-        logger.debug("Starting to fetch members for group: %s", group_id)
+        logger.debug(f"Starting to fetch members for group: {group_id}")
         request = self.get_request_definition(
             SyncStep.GROUP_MEMBERS, {"group_key": group_id}
         )
@@ -177,17 +177,15 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
                 request, auth_context, paginator
             ):
                 logger.debug(
-                    "Fetched batch of %d members for group %s",
-                    len(raw_members),
-                    group_id,
+                    f"Fetched batch of {len(raw_members)} members for group {group_id}"
                 )
                 yield adapt_google_members(raw_members, group_id)
-        logger.debug("Finished fetching members for group: %s", group_id)
+        logger.debug(f"Finished fetching members for group: {group_id}")
 
     async def fetch_token_events(
         self, auth_context: AuthContext, start_time: str | None = None
     ) -> AsyncGenerator[list[UnifiedTokenEvent], None]:
-        logger.debug("Starting to fetch token events, start_time: %s", start_time)
+        logger.debug(f"Starting to fetch token events, start_time: {start_time}")
         request = self.get_request_definition(
             SyncStep.TOKEN_EVENTS, {"start_time": start_time}
         )
@@ -197,7 +195,7 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
             async for raw_events in client.execute_paginated(
                 request, auth_context, paginator
             ):
-                logger.debug("Fetched batch of %d token events", len(raw_events))
+                logger.debug(f"Fetched batch of {len(raw_events)} token events")
                 yield adapt_google_token_events(raw_events)
         logger.debug("Finished fetching token events")
 
@@ -209,7 +207,7 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
         )
 
         logger.debug(
-            "Revoking app access for user: %s, client_id: %s", user_id, client_id
+            f"Revoking app access for user: {user_id}, client_id: {client_id}"
         )
         url = GOOGLE_USER_TOKENS_ENDPOINT.format(user_key=user_id) + f"/{client_id}"
 
@@ -221,7 +219,7 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
         async with self._create_api_client(SyncStep.USER_TOKENS) as client:
             response = await client.execute(request, auth_context)
             success = response.is_success
-            logger.debug("Revoke app access result for user %s: %s", user_id, success)
+            logger.debug(f"Revoke app access result for user {user_id}: {success}")
             return success
 
     def _create_api_client(self, step: SyncStep) -> ApiClient:
@@ -232,7 +230,7 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
             self.provider_slug, step.value, rate_config
         )
 
-        logger.debug("Creating ApiClient for step: %s", step.value)
+        logger.debug(f"Creating ApiClient for step: {step.value}")
         return ApiClient(rate_limiter=rate_limiter)
 
 

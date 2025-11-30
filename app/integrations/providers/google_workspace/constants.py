@@ -34,5 +34,5 @@ GOOGLE_RATE_LIMITS = {
     "token_events": {"requests_per_second": 2.0, "burst_size": 5},
 }
 
-GOOGLE_DEFAULT_PAGE_SIZE = 100
+GOOGLE_DEFAULT_PAGE_SIZE = 2
 GOOGLE_MAX_PAGE_SIZE = 500

@@ -4,16 +4,18 @@ import asyncpg
 
 from app.database.query_builder import bind_named
 from app.dtos.integration.connection_dtos import (
-    CreateOrgProviderConnectionDTO,
-    UpdateOrgProviderConnectionDTO,
+    CreateIdentityProviderConnectionDTO,
+    MarkConnectionErrorDTO,
+    UpdateIdentityProviderConnectionDTO,
+    UpdateTokensDTO,
 )
-from app.models.org_provider_connection import OrgProviderConnection
+from app.models.identity_provider_connection import IdentityProviderConnection
 
 
-class OrgProviderConnectionRepository:
+class IdentityProviderConnectionRepository:
 
     _SELECT_FIELDS = """
-        id, organization_id, provider_id, connected_by_user_id, status,
+        id, organization_id, identity_provider_id, connected_by_user_id, status,
         access_token_encrypted, refresh_token_encrypted, token_expires_at,
         scopes_granted, admin_email, workspace_domain,
         last_sync_started_at, last_sync_completed_at, last_sync_status, last_sync_error,
@@ -25,63 +27,67 @@ class OrgProviderConnectionRepository:
     def __init__(self, conn: asyncpg.Connection):
         self._conn = conn
 
-    async def find_by_id(self, connection_id: int) -> OrgProviderConnection | None:
+    async def find_by_id(self, connection_id: int) -> IdentityProviderConnection | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM org_provider_connection
+            FROM identity_provider_connection
             WHERE id = :connection_id AND deleted_at IS NULL
         """
         query, values = bind_named(query, {"connection_id": connection_id})
         row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def find_by_org_and_provider(
-        self, organization_id: int, provider_id: int
-    ) -> OrgProviderConnection | None:
+    async def find_by_org_and_identity_provider(
+        self, organization_id: int, identity_provider_id: int
+    ) -> IdentityProviderConnection | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM org_provider_connection
+            FROM identity_provider_connection
             WHERE organization_id = :organization_id 
-              AND provider_id = :provider_id 
+              AND identity_provider_id = :identity_provider_id 
               AND deleted_at IS NULL
         """
         query, values = bind_named(
-            query, {"organization_id": organization_id, "provider_id": provider_id}
+            query,
+            {
+                "organization_id": organization_id,
+                "identity_provider_id": identity_provider_id,
+            },
         )
         row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
     async def find_by_organization(
         self, organization_id: int
-    ) -> list[OrgProviderConnection]:
+    ) -> list[IdentityProviderConnection]:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM org_provider_connection
+            FROM identity_provider_connection
             WHERE organization_id = :organization_id AND deleted_at IS NULL
         """
         query, values = bind_named(query, {"organization_id": organization_id})
         rows = await self._conn.fetch(query, *values)
         return [self._map_to_model(row) for row in rows if row]
 
-    async def find_active_connections(self) -> list[OrgProviderConnection]:
+    async def find_active_connections(self) -> list[IdentityProviderConnection]:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM org_provider_connection
+            FROM identity_provider_connection
             WHERE status = 'active' AND deleted_at IS NULL
         """
         rows = await self._conn.fetch(query)
         return [self._map_to_model(row) for row in rows if row]
 
     async def create(
-        self, dto: CreateOrgProviderConnectionDTO
-    ) -> OrgProviderConnection:
+        self, dto: CreateIdentityProviderConnectionDTO
+    ) -> IdentityProviderConnection:
         query = f"""
-            INSERT INTO org_provider_connection (
-                organization_id, provider_id, connected_by_user_id, status,
+            INSERT INTO identity_provider_connection (
+                organization_id, identity_provider_id, connected_by_user_id, status,
                 access_token_encrypted, refresh_token_encrypted, token_expires_at,
                 scopes_granted, admin_email, workspace_domain
             ) VALUES (
-                :organization_id, :provider_id, :connected_by_user_id, :status,
+                :organization_id, :identity_provider_id, :connected_by_user_id, :status,
                 :access_token_encrypted, :refresh_token_encrypted, :token_expires_at,
                 :scopes_granted, :admin_email, :workspace_domain
             )
@@ -91,7 +97,7 @@ class OrgProviderConnectionRepository:
 
         params = {
             "organization_id": dto.organization_id,
-            "provider_id": dto.provider_id,
+            "identity_provider_id": dto.identity_provider_id,
             "connected_by_user_id": dto.connected_by_user_id,
             "status": dto.status,
             "access_token_encrypted": dto.access_token_encrypted,
@@ -108,8 +114,8 @@ class OrgProviderConnectionRepository:
     async def update(
         self,
         connection_id: int,
-        dto: UpdateOrgProviderConnectionDTO,
-    ) -> OrgProviderConnection | None:
+        dto: UpdateIdentityProviderConnectionDTO,
+    ) -> IdentityProviderConnection | None:
         update_fields = self._build_update_fields(dto)
         if not update_fields:
             return await self.find_by_id(connection_id)
@@ -118,7 +124,7 @@ class OrgProviderConnectionRepository:
         set_clause = ", ".join(f"{k} = :{k}" for k in update_fields.keys())
 
         query = f"""
-            UPDATE org_provider_connection
+            UPDATE identity_provider_connection
             SET {set_clause}, updated_at = NOW()
             WHERE id = :connection_id AND deleted_at IS NULL
             RETURNING {self._SELECT_FIELDS}
@@ -134,7 +140,7 @@ class OrgProviderConnectionRepository:
         error: str | None = None,
     ) -> None:
         query = """
-            UPDATE org_provider_connection
+            UPDATE identity_provider_connection
             SET last_sync_status = $1,
                 last_sync_error = $2,
                 last_sync_completed_at = NOW(),
@@ -145,7 +151,7 @@ class OrgProviderConnectionRepository:
 
     async def mark_sync_started(self, connection_id: int) -> None:
         query = """
-            UPDATE org_provider_connection
+            UPDATE identity_provider_connection
             SET last_sync_started_at = NOW(),
                 last_sync_status = 'in_progress',
                 updated_at = NOW()
@@ -153,9 +159,49 @@ class OrgProviderConnectionRepository:
         """
         await self._conn.execute(query, connection_id)
 
+    async def update_tokens(
+        self,
+        connection_id: int,
+        dto: UpdateTokensDTO,
+    ) -> None:
+        query = """
+            UPDATE identity_provider_connection
+            SET access_token_encrypted = $1,
+                refresh_token_encrypted = COALESCE($2, refresh_token_encrypted),
+                token_expires_at = $3,
+                last_token_refresh_at = NOW(),
+                token_refresh_count = token_refresh_count + 1,
+                updated_at = NOW()
+            WHERE id = $4
+        """
+        await self._conn.execute(
+            query,
+            dto.access_token_encrypted,
+            dto.refresh_token_encrypted,
+            dto.token_expires_at,
+            connection_id,
+        )
+
+    async def mark_error(
+        self,
+        connection_id: int,
+        dto: MarkConnectionErrorDTO,
+    ) -> None:
+        query = """
+            UPDATE identity_provider_connection
+            SET status = $1,
+                error_code = $2,
+                error_message = $3,
+                updated_at = NOW()
+            WHERE id = $4
+        """
+        await self._conn.execute(
+            query, dto.status, dto.error_code, dto.error_message, connection_id
+        )
+
     async def soft_delete(self, connection_id: int) -> bool:
         query = """
-            UPDATE org_provider_connection
+            UPDATE identity_provider_connection
             SET deleted_at = NOW(), updated_at = NOW()
             WHERE id = $1 AND deleted_at IS NULL
         """
@@ -163,7 +209,7 @@ class OrgProviderConnectionRepository:
         return result == "UPDATE 1"
 
     def _build_update_fields(
-        self, dto: UpdateOrgProviderConnectionDTO
+        self, dto: UpdateIdentityProviderConnectionDTO
     ) -> dict[str, Any]:
         import json
 
@@ -196,7 +242,9 @@ class OrgProviderConnectionRepository:
             fields["error_message"] = dto.error_message
         return fields
 
-    def _map_to_model(self, row: asyncpg.Record | None) -> OrgProviderConnection | None:
+    def _map_to_model(
+        self, row: asyncpg.Record | None
+    ) -> IdentityProviderConnection | None:
         if row is None:
             return None
 
@@ -206,10 +254,10 @@ class OrgProviderConnectionRepository:
 
             scopes = json.loads(scopes)
 
-        return OrgProviderConnection(
+        return IdentityProviderConnection(
             id=row["id"],
             organization_id=row["organization_id"],
-            provider_id=row["provider_id"],
+            identity_provider_id=row["identity_provider_id"],
             connected_by_user_id=row["connected_by_user_id"],
             status=row["status"],
             access_token_encrypted=row["access_token_encrypted"],

@@ -3,10 +3,10 @@ import json
 import asyncpg
 
 from app.database.query_builder import bind_named
-from app.models.provider import Provider
+from app.models.identity_provider import IdentityProvider
 
 
-class ProviderRepository:
+class IdentityProviderRepository:
 
     _SELECT_FIELDS = """
         id, name, slug, display_name, description, logo_url,
@@ -16,33 +16,35 @@ class ProviderRepository:
     def __init__(self, conn: asyncpg.Connection):
         self._conn = conn
 
-    async def find_by_slug(self, slug: str) -> Provider | None:
+    async def find_by_slug(self, slug: str) -> IdentityProvider | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM provider
+            FROM identity_provider
             WHERE slug = :slug
         """
         query, values = bind_named(query, {"slug": slug})
         row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def find_by_id(self, provider_id: int) -> Provider | None:
+    async def find_by_id(self, identity_provider_id: int) -> IdentityProvider | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM provider
-            WHERE id = :provider_id
+            FROM identity_provider
+            WHERE id = :identity_provider_id
         """
-        query, values = bind_named(query, {"provider_id": provider_id})
+        query, values = bind_named(
+            query, {"identity_provider_id": identity_provider_id}
+        )
         row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    def _map_to_model(self, row: asyncpg.Record | None) -> Provider | None:
+    def _map_to_model(self, row: asyncpg.Record | None) -> IdentityProvider | None:
         if row is None:
             return None
         metadata = row["metadata"]
         if isinstance(metadata, str):
             metadata = json.loads(metadata)
-        return Provider(
+        return IdentityProvider(
             id=row["id"],
             name=row["name"],
             slug=row["slug"],

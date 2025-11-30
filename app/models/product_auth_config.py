@@ -9,7 +9,7 @@ class ProductAuthConfig(BaseModel):
 
     id: int
     product_id: int | None = None
-    provider_id: int
+    identity_provider_id: int
     auth_type: str
     client_id: str | None = None
     client_secret: str | None = None

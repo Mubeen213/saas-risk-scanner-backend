@@ -44,14 +44,14 @@ def _encode_oauth_state(
     user_id: int,
     organization_id: int,
     email: str,
-    provider_slug: str,
+    identity_provider_slug: str,
 ) -> str:
     state_data = {
         "nonce": nonce,
         "user_id": user_id,
         "organization_id": organization_id,
         "email": email,
-        "provider_slug": provider_slug,
+        "identity_provider_slug": identity_provider_slug,
     }
     return base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
@@ -70,8 +70,8 @@ async def initiate_connection(
     service: IntegrationServiceDep,
 ):
     logger.info(
-        "Initiating connection for provider: %s, user: %d",
-        request.provider_slug,
+        "Initiating connection for identity provider: %s, user: %d",
+        request.identity_provider_slug,
         current_user.id,
     )
     nonce = generate_oauth_state()
@@ -81,20 +81,20 @@ async def initiate_connection(
         user_id=current_user.id,
         organization_id=current_user.organization_id,
         email=current_user.email,
-        provider_slug=request.provider_slug,
+        identity_provider_slug=request.identity_provider_slug,
     )
 
     redirect_uri = f"{settings.backend_url}/api/v1/integrations/callback"
 
     try:
         authorization_url = await service.get_connect_url(
-            request.provider_slug,
+            request.identity_provider_slug,
             state,
             redirect_uri,
         )
 
         logger.debug(
-            f"Authorization URL generated for provider: {request.provider_slug}"
+            f"Authorization URL generated for identity provider: {request.identity_provider_slug}"
         )
         response_data = IntegrationConnectResponse(
             authorization_url=authorization_url,
@@ -103,7 +103,9 @@ async def initiate_connection(
         return create_success_response(data=response_data.model_dump())
 
     except ProviderNotFoundError as e:
-        logger.warning("Provider not found: %s", request.provider_slug)
+        logger.warning(
+            "Identity provider not found: %s", request.identity_provider_slug
+        )
         return create_error_response(
             code=e.code,
             message=e.message,
@@ -138,9 +140,9 @@ async def oauth_callback(
     user_id = state_data.get("user_id")
     organization_id = state_data.get("organization_id")
     email = state_data.get("email")
-    provider_slug = state_data.get("provider_slug")
+    identity_provider_slug = state_data.get("identity_provider_slug")
 
-    if not all([user_id, organization_id, email, provider_slug]):
+    if not all([user_id, organization_id, email, identity_provider_slug]):
         logger.warning("Missing user context in OAuth state")
         error_params = urlencode(
             {
@@ -154,7 +156,7 @@ async def oauth_callback(
 
     try:
         connection = await service.handle_oauth_callback(
-            provider_slug,
+            identity_provider_slug,
             code,
             organization_id,
             user_id,
@@ -177,9 +179,9 @@ async def oauth_callback(
 
     except ConnectionAlreadyExistsError as e:
         logger.warning(
-            "Connection already exists for org: %d, provider: %s",
+            "Connection already exists for org: %d, identity provider: %s",
             organization_id,
-            provider_slug,
+            identity_provider_slug,
         )
         error_params = urlencode(
             {
@@ -190,7 +192,7 @@ async def oauth_callback(
         return RedirectResponse(url=f"{frontend_callback}?{error_params}")
 
     except ProviderNotFoundError as e:
-        logger.warning("Provider not found: %s", provider_slug)
+        logger.warning("Identity provider not found: %s", identity_provider_slug)
         error_params = urlencode(
             {
                 "error": e.code,
@@ -224,7 +226,7 @@ async def list_connections(
         ConnectionResponse(
             id=c.id,
             organization_id=c.organization_id,
-            provider_id=c.provider_id,
+            identity_provider_id=c.identity_provider_id,
             status=c.status,
             admin_email=c.admin_email,
             workspace_domain=c.workspace_domain,

@@ -1,6 +1,8 @@
 from app.dtos.integration.connection_dtos import (
-    CreateOrgProviderConnectionDTO,
-    UpdateOrgProviderConnectionDTO,
+    CreateIdentityProviderConnectionDTO,
+    UpdateIdentityProviderConnectionDTO,
+    UpdateTokensDTO,
+    MarkConnectionErrorDTO,
 )
 from app.dtos.integration.discovery_dtos import (
     CreateAppAuthorizationDTO,
@@ -17,8 +19,10 @@ from app.dtos.integration.workspace_dtos import (
 )
 
 __all__ = [
-    "CreateOrgProviderConnectionDTO",
-    "UpdateOrgProviderConnectionDTO",
+    "CreateIdentityProviderConnectionDTO",
+    "UpdateIdentityProviderConnectionDTO",
+    "UpdateTokensDTO",
+    "MarkConnectionErrorDTO",
     "CreateWorkspaceUserDTO",
     "UpdateWorkspaceUserDTO",
     "CreateWorkspaceGroupDTO",

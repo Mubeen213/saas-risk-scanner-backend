@@ -3,9 +3,9 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class CreateOrgProviderConnectionDTO(BaseModel):
+class CreateIdentityProviderConnectionDTO(BaseModel):
     organization_id: int = Field(..., gt=0)
-    provider_id: int = Field(..., gt=0)
+    identity_provider_id: int = Field(..., gt=0)
     connected_by_user_id: int = Field(..., gt=0)
     status: str
     access_token_encrypted: str
@@ -16,7 +16,7 @@ class CreateOrgProviderConnectionDTO(BaseModel):
     workspace_domain: str | None = None
 
 
-class UpdateOrgProviderConnectionDTO(BaseModel):
+class UpdateIdentityProviderConnectionDTO(BaseModel):
     status: str | None = None
     access_token_encrypted: str | None = None
     refresh_token_encrypted: str | None = None
@@ -30,3 +30,15 @@ class UpdateOrgProviderConnectionDTO(BaseModel):
     token_refresh_count: int | None = None
     error_code: str | None = None
     error_message: str | None = None
+
+
+class UpdateTokensDTO(BaseModel):
+    access_token_encrypted: str
+    refresh_token_encrypted: str | None = None
+    token_expires_at: datetime | None = None
+
+
+class MarkConnectionErrorDTO(BaseModel):
+    status: str = "error"
+    error_code: str
+    error_message: str

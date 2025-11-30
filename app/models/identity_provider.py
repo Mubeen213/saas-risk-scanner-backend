@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class Provider(BaseModel):
+class IdentityProvider(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int

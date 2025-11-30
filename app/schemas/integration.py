@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field
 
 
 class IntegrationConnectRequest(BaseModel):
-    provider_slug: str = Field(
-        ..., description="Provider slug (e.g., 'google-workspace')"
+    identity_provider_slug: str = Field(
+        ..., description="Identity provider slug (e.g., 'google-workspace')"
     )
     redirect_uri: str | None = Field(
         None,
@@ -19,7 +19,7 @@ class IntegrationConnectResponse(BaseModel):
 
 
 class IntegrationCallbackRequest(BaseModel):
-    provider_slug: str
+    identity_provider_slug: str
     code: str
     state: str
 
@@ -27,8 +27,8 @@ class IntegrationCallbackRequest(BaseModel):
 class ConnectionResponse(BaseModel):
     id: int
     organization_id: int
-    provider_id: int
-    provider_slug: str | None = None
+    identity_provider_id: int
+    identity_provider_slug: str | None = None
     status: str
     admin_email: str | None
     workspace_domain: str | None

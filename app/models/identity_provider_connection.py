@@ -1,15 +1,14 @@
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class OrgProviderConnection(BaseModel):
+class IdentityProviderConnection(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     organization_id: int
-    provider_id: int
+    identity_provider_id: int
     connected_by_user_id: int
     status: str
     access_token_encrypted: str | None = None

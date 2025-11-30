@@ -80,7 +80,9 @@ class ApiClient:
         paginator: PaginationStrategy,
     ) -> AsyncGenerator[list[Any], None]:
         current_params = {**request.params}
-
+        logger.info(
+            f"Starting paginated request to {request.url} with params {current_params}"
+        )
         if hasattr(paginator, "get_initial_params"):
             initial_params = paginator.get_initial_params()
             current_params = {**initial_params, **current_params}
@@ -127,7 +129,9 @@ class ApiClient:
         self, request: RequestDefinition, headers: dict[str, str]
     ) -> ApiResponse:
         last_exception: Exception | None = None
-
+        logger.info(
+            f"Executing request to {request.url} with retries up to {self._max_retries}"
+        )
         for attempt in range(self._max_retries):
             try:
                 response = await self._make_request(request, headers)
@@ -176,6 +180,9 @@ class ApiClient:
         ):
             kwargs["json"] = request.body
 
+        logger.debug(
+            f"Making {request.method.value} request to {request.url} with params {request.params} and headers {len(request.headers)}"
+        )
         async with client.request(http_method, request.url, **kwargs) as response:
             try:
                 data = await response.json()
@@ -190,6 +197,7 @@ class ApiClient:
 
     def _parse_retry_after(self, headers: dict[str, str]) -> int | None:
         retry_after = headers.get("Retry-After") or headers.get("retry-after")
+        logger.debug(f"Parsing Retry-After header: {retry_after}")
         if retry_after:
             try:
                 return int(retry_after)

@@ -37,6 +37,7 @@ class GoogleOAuthProvider(OAuthProvider):
     def _sync_exchange_code(self, config: OAuthConfig, code: str) -> OAuthTokens | None:
         """Synchronous token exchange using google-auth-oauthlib."""
         try:
+            logger.debug("Exchanging code for tokens with Google OAuth")
             flow = Flow.from_client_config(
                 client_config={
                     "web": {

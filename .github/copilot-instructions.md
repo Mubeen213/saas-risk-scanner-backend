@@ -130,7 +130,6 @@ The application follows a strict hierarchical injection flow:
   * Must define `Depends()` chains to assemble the object graph.
   * Must handle the `async with` database session lifecycle here.
 
-<!-- end list -->
 
 ```python
 # dependencies.py pattern
@@ -274,9 +273,9 @@ No `Any` unless absolutely unavoidable.
 
 ```python
     async def exchange_code_for_tokens(
-        self, provider: OAuthProvider, config: OAuthConfig, code: str
+        self, identityProvider: OAuthProvider, config: OAuthConfig, code: str
     ) -> OAuthResult:
-        tokens = await provider.exchange_code(config, code)
+        tokens = await identityProvider.exchange_code(config, code)
         if tokens is None:
             return OAuthResult(
                 success=False,
@@ -357,7 +356,7 @@ Caller must use it like this:
 * No large files — split by domain.
 * No commented-out code in main branches.
 * No global mutable state.
-* Use meaningful names.
+* Use meaningful Variables names. Must not use generic names like `data`, `info`, `item`.
 * Do not provide any doc strings, the function and variable names should be self explanatory.
 
 ---
@@ -376,6 +375,11 @@ Caller must use it like this:
 * Controllers convert them into proper HTTP responses.
 
 ---
+
+### Common Python Practices:
+* Use datetime.now(timezone.utc) for UTC timestamps.
+* Use f-strings for logging and messages.
+* Use async/await for all I/O operations.
 
 #  **6. What You Must Not Do**
 

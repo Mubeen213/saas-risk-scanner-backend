@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from pydantic import ValidationError
@@ -13,7 +13,7 @@ class TokenService:
     def create_access_token(
         self, user_id: int, org_id: int, role: str, email: str
     ) -> str:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires = now + timedelta(seconds=settings.access_token_expire_seconds)
         payload = {
             "sub": str(user_id),
@@ -30,7 +30,7 @@ class TokenService:
         )
 
     def create_refresh_token(self, user_id: int, jti: str) -> str:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires = now + timedelta(seconds=settings.refresh_token_expire_seconds)
         payload = {
             "sub": str(user_id),

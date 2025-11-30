@@ -23,5 +23,4 @@ class OAuthProviderRegistry:
 
 oauth_provider_registry = OAuthProviderRegistry()
 
-# Register built-in providers
 oauth_provider_registry.register(google_oauth_provider)

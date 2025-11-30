@@ -6,7 +6,7 @@
 -- Note: client_id and client_secret should be updated via environment or direct DB update
 INSERT INTO product_auth_config (
     product_id,
-    provider_id,
+    identity_provider_id,
     auth_type,
     client_id,
     client_secret,
@@ -20,7 +20,7 @@ INSERT INTO product_auth_config (
     is_active
 ) VALUES (
     NULL,
-    (SELECT id FROM provider WHERE slug = 'google-workspace'),
+    (SELECT id FROM identity_provider WHERE slug = 'google-workspace'),
     'oauth2',
     '',
     '',

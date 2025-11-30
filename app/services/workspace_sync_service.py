@@ -28,15 +28,15 @@ from app.integrations.providers.google_workspace import (
     GOOGLE_WORKSPACE_PROVIDER_SLUG,
     google_workspace_provider,
 )
-from app.models.org_provider_connection import OrgProviderConnection
-from app.models.provider import Provider
+from app.models.identity_provider import IdentityProvider
+from app.models.identity_provider_connection import IdentityProviderConnection
 from app.repositories.app_authorization_repository import AppAuthorizationRepository
 from app.repositories.discovered_app_repository import DiscoveredAppRepository
-from app.repositories.org_provider_connection_repository import (
-    OrgProviderConnectionRepository,
+from app.repositories.identity_provider_connection_repository import (
+    IdentityProviderConnectionRepository,
 )
+from app.repositories.identity_provider_repository import IdentityProviderRepository
 from app.repositories.product_auth_config_repository import ProductAuthConfigRepository
-from app.repositories.provider_repository import ProviderRepository
 from app.repositories.workspace_group_repository import WorkspaceGroupRepository
 from app.repositories.workspace_user_repository import WorkspaceUserRepository
 
@@ -46,8 +46,8 @@ logger = logging.getLogger(__name__)
 class WorkspaceSyncService:
     def __init__(
         self,
-        connection_repository: OrgProviderConnectionRepository,
-        provider_repository: ProviderRepository,
+        connection_repository: IdentityProviderConnectionRepository,
+        identity_provider_repository: IdentityProviderRepository,
         auth_config_repository: ProductAuthConfigRepository,
         workspace_user_repository: WorkspaceUserRepository,
         workspace_group_repository: WorkspaceGroupRepository,
@@ -56,7 +56,7 @@ class WorkspaceSyncService:
         credentials_manager: CredentialsManager,
     ):
         self._connection_repo = connection_repository
-        self._provider_repo = provider_repository
+        self._identity_provider_repo = identity_provider_repository
         self._auth_config_repo = auth_config_repository
         self._user_repo = workspace_user_repository
         self._group_repo = workspace_group_repository
@@ -72,27 +72,35 @@ class WorkspaceSyncService:
             raise ConnectionNotFoundError(connection_id)
 
         logger.debug(
-            f"Connection found: org_id={connection.organization_id}, provider_id={connection.provider_id}"
+            f"Connection found: org_id={connection.organization_id}, identity_provider_id={connection.identity_provider_id}"
         )
         await self._connection_repo.mark_sync_started(connection_id)
 
         try:
-            provider: Provider | None = await self._provider_repo.find_by_id(
-                connection.provider_id
+            identity_provider: IdentityProvider | None = (
+                await self._identity_provider_repo.find_by_id(
+                    connection.identity_provider_id
+                )
             )
-            if not provider:
-                logger.error(f"Provider not found for id: {connection.provider_id}")
-                raise SyncError("init", "Provider not found")
+            if not identity_provider:
+                logger.error(
+                    f"Identity provider not found for id: {connection.identity_provider_id}"
+                )
+                raise SyncError("init", "Identity provider not found")
 
-            logger.debug(f"Provider found: slug={provider.slug}")
+            logger.debug(f"Identity provider found: slug={identity_provider.slug}")
 
-            auth_config = await self._auth_config_repo.find_by_provider_id(provider.id)
+            auth_config = await self._auth_config_repo.find_by_identity_provider_id(
+                identity_provider.id
+            )
             if not auth_config:
-                logger.error(f"Auth config not found for provider: {provider.id}")
+                logger.error(
+                    f"Auth config not found for identity provider: {identity_provider.id}"
+                )
                 raise SyncError("init", "Auth config not found")
 
             logger.debug(
-                f"Auth config loaded for provider: {provider.slug} and authConfig: {auth_config}"
+                f"Auth config loaded for identity provider: {identity_provider.slug} and authConfig: {auth_config}"
             )
 
             auth_context = await self._credentials_manager.get_valid_credentials(
@@ -100,7 +108,7 @@ class WorkspaceSyncService:
             )
             logger.debug(f"Credentials obtained for connection: {connection_id}")
 
-            workspace_provider = self._get_workspace_provider(provider.slug)
+            workspace_provider = self._get_workspace_provider(identity_provider.slug)
             self._credentials_manager.set_provider(workspace_provider)
 
             logger.debug(f"Starting user sync for connection: {connection_id}")
@@ -133,7 +141,7 @@ class WorkspaceSyncService:
 
     async def _sync_users(
         self,
-        connection: OrgProviderConnection,
+        connection: IdentityProviderConnection,
         auth_context: AuthContext,
     ) -> int:
         provider = self._get_workspace_provider(GOOGLE_WORKSPACE_PROVIDER_SLUG)
@@ -149,7 +157,7 @@ class WorkspaceSyncService:
 
     async def _sync_groups(
         self,
-        connection: OrgProviderConnection,
+        connection: IdentityProviderConnection,
         auth_context: AuthContext,
     ) -> int:
         provider = self._get_workspace_provider(GOOGLE_WORKSPACE_PROVIDER_SLUG)
@@ -165,7 +173,7 @@ class WorkspaceSyncService:
 
     async def _sync_group_memberships(
         self,
-        connection: OrgProviderConnection,
+        connection: IdentityProviderConnection,
         auth_context: AuthContext,
     ) -> int:
         provider = self._get_workspace_provider(GOOGLE_WORKSPACE_PROVIDER_SLUG)
@@ -191,7 +199,7 @@ class WorkspaceSyncService:
 
     async def _sync_token_events(
         self,
-        connection: OrgProviderConnection,
+        connection: IdentityProviderConnection,
         auth_context: AuthContext,
     ) -> int:
         provider = self._get_workspace_provider(GOOGLE_WORKSPACE_PROVIDER_SLUG)
@@ -203,13 +211,13 @@ class WorkspaceSyncService:
                 total_synced += 1
 
         logger.info(
-            "Synced %d token events for connection %d", total_synced, connection.id
+            f"Synced {total_synced} token events for connection {connection.id}"
         )
         return total_synced
 
     async def _upsert_workspace_user(
         self,
-        connection: OrgProviderConnection,
+        connection: IdentityProviderConnection,
         user: UnifiedUser,
     ) -> None:
         dto = CreateWorkspaceUserDTO(
@@ -231,7 +239,7 @@ class WorkspaceSyncService:
 
     async def _upsert_workspace_group(
         self,
-        connection: OrgProviderConnection,
+        connection: IdentityProviderConnection,
         group: UnifiedGroup,
     ) -> None:
         dto = CreateWorkspaceGroupDTO(
@@ -267,7 +275,7 @@ class WorkspaceSyncService:
 
     async def _process_token_event(
         self,
-        connection: OrgProviderConnection,
+        connection: IdentityProviderConnection,
         event: UnifiedTokenEvent,
     ) -> None:
         user = await self._user_repo.find_by_email(
@@ -287,7 +295,7 @@ class WorkspaceSyncService:
 
     async def _upsert_discovered_app(
         self,
-        connection: OrgProviderConnection,
+        connection: IdentityProviderConnection,
         event: UnifiedTokenEvent,
     ):
         event_time = event.event_time or datetime.now(timezone.utc)
