@@ -14,9 +14,10 @@ class ProductAuthConfigRepository:
         scopes, redirect_uri, additional_params, is_active, created_at, updated_at
     """
 
-    async def find_by_provider_id(
-        self, conn: asyncpg.Connection, provider_id: int
-    ) -> ProductAuthConfig | None:
+    def __init__(self, conn: asyncpg.Connection):
+        self._conn = conn
+
+    async def find_by_provider_id(self, provider_id: int) -> ProductAuthConfig | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM product_auth_config
@@ -24,12 +25,10 @@ class ProductAuthConfigRepository:
             LIMIT 1
         """
         query, values = bind_named(query, {"provider_id": provider_id})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def find_by_product_id(
-        self, conn: asyncpg.Connection, product_id: int
-    ) -> ProductAuthConfig | None:
+    async def find_by_product_id(self, product_id: int) -> ProductAuthConfig | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM product_auth_config
@@ -37,11 +36,11 @@ class ProductAuthConfigRepository:
             LIMIT 1
         """
         query, values = bind_named(query, {"product_id": product_id})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
     async def find_platform_config_by_provider_slug(
-        self, conn: asyncpg.Connection, provider_slug: str
+        self, provider_slug: str
     ) -> ProductAuthConfig | None:
         query = """
             SELECT pac.id, pac.product_id, pac.provider_id, pac.auth_type,
@@ -55,7 +54,7 @@ class ProductAuthConfigRepository:
             LIMIT 1
         """
         query, values = bind_named(query, {"provider_slug": provider_slug})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
     def _map_to_model(self, row: asyncpg.Record | None) -> ProductAuthConfig | None:
@@ -85,6 +84,3 @@ class ProductAuthConfigRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
-
-
-product_auth_config_repository = ProductAuthConfigRepository()

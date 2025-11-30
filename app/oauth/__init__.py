@@ -1,6 +1,6 @@
 from app.oauth.base import OAuthProvider
 from app.oauth.registry import oauth_provider_registry
-from app.oauth.service import OAuthResult, oauth_service
+from app.oauth.service import OAuthResult, OAuthService
 from app.oauth.types import OAuthConfig, OAuthTokens, OAuthUserInfo
 
 __all__ = [
@@ -9,6 +9,6 @@ __all__ = [
     "OAuthTokens",
     "OAuthUserInfo",
     "OAuthResult",
-    "oauth_service",
+    "OAuthService",
     "oauth_provider_registry",
 ]

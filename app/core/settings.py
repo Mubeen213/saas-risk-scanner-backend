@@ -26,8 +26,14 @@ class Settings(BaseSettings):
     access_token_expire_seconds: int = 3600
     refresh_token_expire_seconds: int = 604800
 
-    frontend_url: str = "http://localhost:3000"
-    allowed_redirect_uris: str = "http://localhost:3000/auth/callback"
+    encryption_key: str = ""
+
+    backend_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:5173"
+    allowed_redirect_uris: str = (
+        "http://localhost:5173/auth/callback,"
+        "http://localhost:8000/api/v1/integrations/google/callback"
+    )
 
     @property
     def allowed_redirect_uri_list(self) -> list[str]:

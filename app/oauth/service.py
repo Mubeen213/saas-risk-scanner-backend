@@ -1,23 +1,22 @@
-import secrets
+import logging
 from dataclasses import dataclass
 from typing import Any
-
-import asyncpg
 
 from app.constants.auth_errors import AUTH_ERROR_MESSAGES, AuthErrorCode
 from app.oauth.base import OAuthProvider
 from app.oauth.registry import oauth_provider_registry
 from app.oauth.types import OAuthConfig, OAuthTokens, OAuthUserInfo
-from app.repositories.product_auth_config_repository import (
-    product_auth_config_repository,
-)
-from app.repositories.provider_repository import provider_repository
+from app.repositories.product_auth_config_repository import ProductAuthConfigRepository
+from app.repositories.provider_repository import ProviderRepository
+from app.utils.oauth_state import create_signed_state, verify_signed_state
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class OAuthResult:
     success: bool
-    data: Any = None
+    data: OAuthTokens | OAuthUserInfo | None = None
     error_code: AuthErrorCode | None = None
 
     @property
@@ -29,26 +28,33 @@ class OAuthResult:
 
 class OAuthService:
 
-    def __init__(self) -> None:
-        self._state_store: dict[str, dict[str, Any]] = {}
+    def __init__(
+        self,
+        provider_repository: ProviderRepository,
+        product_auth_config_repository: ProductAuthConfigRepository,
+    ):
+        self._provider_repository = provider_repository
+        self._product_auth_config_repository = product_auth_config_repository
 
     async def get_provider_config(
-        self, conn: asyncpg.Connection, provider_slug: str
+        self, provider_slug: str
     ) -> tuple[OAuthProvider, OAuthConfig] | None:
-        provider = await provider_repository.find_by_slug(conn, provider_slug)
+        logger.debug("Fetching provider config for: %s", provider_slug)
+        provider = await self._provider_repository.find_by_slug(provider_slug)
         if provider is None:
+            logger.warning("Provider not found: %s", provider_slug)
             return None
 
-        auth_config = (
-            await product_auth_config_repository.find_platform_config_by_provider_slug(
-                conn, provider_slug
-            )
+        auth_config = await self._product_auth_config_repository.find_platform_config_by_provider_slug(
+            provider_slug
         )
         if auth_config is None:
+            logger.warning("Auth config not found for provider: %s", provider_slug)
             return None
 
         oauth_provider = oauth_provider_registry.get(provider_slug)
         if oauth_provider is None:
+            logger.warning("OAuth provider not registered: %s", provider_slug)
             return None
 
         config = OAuthConfig(
@@ -70,37 +76,44 @@ class OAuthService:
         config: OAuthConfig,
         frontend_redirect_uri: str,
     ) -> str:
-        state = secrets.token_urlsafe(32)
-        self._state_store[state] = {
-            "provider_slug": provider.provider_slug,
-            "frontend_redirect_uri": frontend_redirect_uri,
-        }
+        state = create_signed_state(provider.provider_slug, frontend_redirect_uri)
         return provider.build_authorization_url(config, state)
 
     def validate_and_consume_state(self, state: str) -> dict[str, Any] | None:
-        return self._state_store.pop(state, None)
+        return verify_signed_state(state)
 
     async def exchange_code_for_tokens(
         self, provider: OAuthProvider, config: OAuthConfig, code: str
     ) -> OAuthResult:
+        logger.debug(
+            "Exchanging code for tokens with provider: %s", provider.provider_slug
+        )
         tokens = await provider.exchange_code(config, code)
         if tokens is None:
+            logger.warning(
+                "Token exchange failed for provider: %s", provider.provider_slug
+            )
             return OAuthResult(
                 success=False,
                 error_code=AuthErrorCode.OAUTH_TOKEN_EXCHANGE_FAILED,
             )
+        logger.info(
+            "Token exchange successful for provider: %s", provider.provider_slug
+        )
         return OAuthResult(success=True, data=tokens)
 
     async def fetch_user_info(
         self, provider: OAuthProvider, config: OAuthConfig, access_token: str
     ) -> OAuthResult:
+        logger.debug("Fetching user info from provider: %s", provider.provider_slug)
         user_info = await provider.fetch_user_info(config, access_token)
         if user_info is None:
+            logger.warning(
+                "Failed to fetch user info from provider: %s", provider.provider_slug
+            )
             return OAuthResult(
                 success=False,
                 error_code=AuthErrorCode.OAUTH_USER_INFO_FAILED,
             )
+        logger.info("User info fetched successfully for: %s", user_info.email)
         return OAuthResult(success=True, data=user_info)
-
-
-oauth_service = OAuthService()

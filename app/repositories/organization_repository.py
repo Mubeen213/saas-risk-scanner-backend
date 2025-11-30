@@ -12,45 +12,40 @@ class OrganizationRepository:
         status, created_at, updated_at, deleted_at
     """
 
-    async def find_by_domain(
-        self, conn: asyncpg.Connection, domain: str
-    ) -> Organization | None:
+    def __init__(self, conn: asyncpg.Connection):
+        self._conn = conn
+
+    async def find_by_domain(self, domain: str) -> Organization | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM organization
             WHERE LOWER(domain) = LOWER(:domain) AND deleted_at IS NULL
         """
         query, values = bind_named(query, {"domain": domain})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def find_by_id(
-        self, conn: asyncpg.Connection, org_id: int
-    ) -> Organization | None:
+    async def find_by_id(self, org_id: int) -> Organization | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM organization
             WHERE id = :org_id AND deleted_at IS NULL
         """
         query, values = bind_named(query, {"org_id": org_id})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def find_by_slug(
-        self, conn: asyncpg.Connection, slug: str
-    ) -> Organization | None:
+    async def find_by_slug(self, slug: str) -> Organization | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM organization
             WHERE slug = :slug AND deleted_at IS NULL
         """
         query, values = bind_named(query, {"slug": slug})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def create(
-        self, conn: asyncpg.Connection, dto: CreateOrganizationDTO
-    ) -> Organization:
+    async def create(self, dto: CreateOrganizationDTO) -> Organization:
         query = f"""
             INSERT INTO organization (
                 name, slug, domain, plan_id, status
@@ -67,7 +62,7 @@ class OrganizationRepository:
             "status": dto.status,
         }
         query, values = bind_named(query, params)
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
     def _map_to_model(self, row: asyncpg.Record | None) -> Organization | None:
@@ -85,6 +80,3 @@ class OrganizationRepository:
             updated_at=row["updated_at"],
             deleted_at=row["deleted_at"],
         )
-
-
-organization_repository = OrganizationRepository()

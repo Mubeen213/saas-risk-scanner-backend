@@ -13,28 +13,27 @@ class ProviderRepository:
         website_url, documentation_url, status, metadata, created_at, updated_at
     """
 
-    async def find_by_slug(
-        self, conn: asyncpg.Connection, slug: str
-    ) -> Provider | None:
+    def __init__(self, conn: asyncpg.Connection):
+        self._conn = conn
+
+    async def find_by_slug(self, slug: str) -> Provider | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM provider
             WHERE slug = :slug
         """
         query, values = bind_named(query, {"slug": slug})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def find_by_id(
-        self, conn: asyncpg.Connection, provider_id: int
-    ) -> Provider | None:
+    async def find_by_id(self, provider_id: int) -> Provider | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM provider
             WHERE id = :provider_id
         """
         query, values = bind_named(query, {"provider_id": provider_id})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
     def _map_to_model(self, row: asyncpg.Record | None) -> Provider | None:
@@ -57,6 +56,3 @@ class ProviderRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
-
-
-provider_repository = ProviderRepository()

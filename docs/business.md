@@ -118,20 +118,23 @@ Set up push notifications for new token events.
 
 ---
 
-### 1.2 Directory API - Users & Token Revocation (SUPPORTING)
+### 1.2 Directory API - Users, Groups & Token Revocation (SUPPORTING)
 
 **Purpose:** 
 1. Get user metadata (name, org unit, admin status)
-2. Revoke app access when needed
-3. Initial crawl for apps authorized >180 days ago
+2. Map users to teams/groups for risk segmentation
+3. Revoke app access when needed
+4. Initial crawl for apps authorized >180 days ago
 
 **Official Documentation:**
 - Users Resource: https://developers.google.com/admin-sdk/directory/v1/reference/users
+- Groups Resource: https://developers.google.com/admin-sdk/directory/v1/reference/groups
 - Tokens Resource: https://developers.google.com/admin-sdk/directory/v1/reference/tokens
 
 **Required OAuth Scopes:**
 ```
 https://www.googleapis.com/auth/admin.directory.user.readonly
+https://www.googleapis.com/auth/admin.directory.group.readonly
 https://www.googleapis.com/auth/admin.directory.user.security
 ```
 
@@ -142,12 +145,20 @@ GET https://admin.googleapis.com/admin/directory/v1/users?customer=my_customer
 
 **Response includes:** User email, name, org unit, admin status, 2FA status
 
-#### Endpoint 2: Revoke App Access
+#### Endpoint 2: List Groups & Members
+**Purpose:** Map users to teams/departments for risk segmentation.
+
+```http
+GET https://admin.googleapis.com/admin/directory/v1/groups?customer=my_customer
+GET https://admin.googleapis.com/admin/directory/v1/groups/{groupKey}/members
+```
+
+#### Endpoint 3: Revoke App Access
 ```http
 DELETE https://admin.googleapis.com/admin/directory/v1/users/{userKey}/tokens/{clientId}
 ```
 
-#### Endpoint 3: List User Tokens (Initial Crawl Only)
+#### Endpoint 4: List User Tokens (Initial Crawl Only)
 ```http
 GET https://admin.googleapis.com/admin/directory/v1/users/{userKey}/tokens
 ```

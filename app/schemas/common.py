@@ -1,8 +1,12 @@
+import logging
 from datetime import datetime
 from typing import Any, Generic, TypeVar
 from uuid import uuid4
 
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -50,13 +54,26 @@ def create_success_response[T](data: T) -> ApiResponse[T]:
 
 
 def create_error_response(
-    code: str, message: str, target: str | None = None
-) -> ApiResponse[None]:
-    return ApiResponse(
+    code: str, message: str, target: str | None = None, status_code: int = 400
+) -> JSONResponse:
+    request_id = str(uuid4())
+    response = ApiResponse(
         meta=MetaResponse(
-            request_id=str(uuid4()),
+            request_id=request_id,
             timestamp=datetime.utcnow(),
         ),
         data=None,
         error=ErrorResponse(code=code, message=message, target=target),
+    )
+    logger.warning(
+        "Error response [%s] status=%d code=%s target=%s message=%s",
+        request_id,
+        status_code,
+        code,
+        target,
+        message,
+    )
+    return JSONResponse(
+        status_code=status_code,
+        content=response.model_dump(mode="json"),
     )

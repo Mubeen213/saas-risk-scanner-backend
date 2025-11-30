@@ -1,17 +1,29 @@
-from app.repositories.organization_repository import organization_repository
-from app.repositories.plan_repository import plan_repository
-from app.repositories.product_auth_config_repository import (
-    product_auth_config_repository,
+from app.repositories.app_authorization_repository import AppAuthorizationRepository
+from app.repositories.discovered_app_repository import DiscoveredAppRepository
+from app.repositories.org_provider_connection_repository import (
+    OrgProviderConnectionRepository,
 )
-from app.repositories.provider_repository import provider_repository
-from app.repositories.role_repository import role_repository
-from app.repositories.user_repository import user_repository
+from app.repositories.organization_repository import OrganizationRepository
+from app.repositories.plan_repository import PlanRepository
+from app.repositories.product_auth_config_repository import (
+    ProductAuthConfigRepository,
+)
+from app.repositories.provider_repository import ProviderRepository
+from app.repositories.role_repository import RoleRepository
+from app.repositories.user_repository import UserRepository
+from app.repositories.workspace_group_repository import WorkspaceGroupRepository
+from app.repositories.workspace_user_repository import WorkspaceUserRepository
 
 __all__ = [
-    "user_repository",
-    "organization_repository",
-    "role_repository",
-    "plan_repository",
-    "provider_repository",
-    "product_auth_config_repository",
+    "AppAuthorizationRepository",
+    "DiscoveredAppRepository",
+    "OrgProviderConnectionRepository",
+    "OrganizationRepository",
+    "PlanRepository",
+    "ProductAuthConfigRepository",
+    "ProviderRepository",
+    "RoleRepository",
+    "UserRepository",
+    "WorkspaceGroupRepository",
+    "WorkspaceUserRepository",
 ]

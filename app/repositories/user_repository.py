@@ -13,39 +13,40 @@ class UserRepository:
         invited_at, joined_at, last_login_at, created_at, updated_at, deleted_at
     """
 
-    async def find_by_provider_id(
-        self, conn: asyncpg.Connection, provider_id: str
-    ) -> User | None:
+    def __init__(self, conn: asyncpg.Connection):
+        self._conn = conn
+
+    async def find_by_provider_id(self, provider_id: str) -> User | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM "user"
             WHERE provider_id = :provider_id AND deleted_at IS NULL
         """
         query, values = bind_named(query, {"provider_id": provider_id})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def find_by_email(self, conn: asyncpg.Connection, email: str) -> User | None:
+    async def find_by_email(self, email: str) -> User | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM "user"
             WHERE LOWER(email) = LOWER(:email) AND deleted_at IS NULL
         """
         query, values = bind_named(query, {"email": email})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def find_by_id(self, conn: asyncpg.Connection, user_id: int) -> User | None:
+    async def find_by_id(self, user_id: int) -> User | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
             FROM "user"
             WHERE id = :user_id AND deleted_at IS NULL
         """
         query, values = bind_named(query, {"user_id": user_id})
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def create(self, conn: asyncpg.Connection, dto: CreateUserDTO) -> User:
+    async def create(self, dto: CreateUserDTO) -> User:
         query = f"""
             INSERT INTO "user" (
                 organization_id, role_id, email, full_name, avatar_url,
@@ -69,15 +70,13 @@ class UserRepository:
             "last_login_at": dto.last_login_at,
         }
         query, values = bind_named(query, params)
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def update(
-        self, conn: asyncpg.Connection, user_id: int, dto: UpdateUserDTO
-    ) -> User | None:
+    async def update(self, user_id: int, dto: UpdateUserDTO) -> User | None:
         update_fields = self._build_update_fields(dto)
         if not update_fields:
-            return await self.find_by_id(conn, user_id)
+            return await self.find_by_id(user_id)
 
         params = {"user_id": user_id, **update_fields}
         set_clause = ", ".join(f"{k} = :{k}" for k in update_fields.keys())
@@ -89,7 +88,7 @@ class UserRepository:
             RETURNING {self._SELECT_FIELDS}
         """
         query, values = bind_named(query, params)
-        row = await conn.fetchrow(query, *values)
+        row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
     def _build_update_fields(self, dto: UpdateUserDTO) -> dict:
@@ -131,6 +130,3 @@ class UserRepository:
             updated_at=row["updated_at"],
             deleted_at=row["deleted_at"],
         )
-
-
-user_repository = UserRepository()

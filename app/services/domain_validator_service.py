@@ -11,6 +11,3 @@ class DomainValidatorService:
 
     def extract_domain(self, email: str) -> str:
         return email.split("@")[1].lower()
-
-
-domain_validator_service = DomainValidatorService()

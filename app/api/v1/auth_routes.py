@@ -2,10 +2,10 @@ import logging
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Cookie, Query, Response
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Body, Cookie, Query, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 
-from app.core.dependencies import CurrentUserDep
+from app.core.dependencies import AuthServiceDep, CurrentUserDep
 from app.core.settings import settings
 from app.schemas.auth import (
     AuthSuccessResponse,
@@ -21,7 +21,6 @@ from app.schemas.common import (
     create_success_response,
 )
 from app.schemas.user import UserResponse
-from app.services.auth_service import auth_service
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +72,9 @@ def _clear_auth_cookies(response: Response) -> None:
     summary="Initiate Google OAuth",
 )
 async def initiate_google_oauth(
+    auth_service: AuthServiceDep,
     redirect_uri: str = Query(..., description="Frontend callback URL"),
-) -> ApiResponse[AuthUrlResponse]:
+) -> ApiResponse[AuthUrlResponse] | JSONResponse:
     logging.debug(f"Initiating Google OAuth with redirect_uri: {redirect_uri}")
     result = await auth_service.get_google_auth_url(redirect_uri)
     if not result.success:
@@ -92,6 +92,7 @@ async def initiate_google_oauth(
     description="Handles Google OAuth callback, sets secure cookies, and redirects to frontend",
 )
 async def google_oauth_callback(
+    auth_service: AuthServiceDep,
     code: str = Query(..., description="Authorization code from Google"),
     state: str = Query(..., description="State parameter for CSRF validation"),
 ) -> RedirectResponse:
@@ -158,14 +159,32 @@ async def google_oauth_callback(
     summary="Refresh Access Token",
 )
 async def refresh_access_token(
-    request: RefreshTokenRequest,
-) -> ApiResponse[TokenResponse]:
-    result = await auth_service.refresh_token(request.refresh_token)
+    response: Response,
+    auth_service: AuthServiceDep,
+    refresh_token_body: Annotated[
+        str | None, Body(alias="refresh_token", embed=True)
+    ] = None,
+    refresh_token_cookie: Annotated[str | None, Cookie(alias="refresh_token")] = None,
+) -> ApiResponse[TokenResponse] | JSONResponse:
+    # Use refresh token from request body or cookie
+    refresh_token = refresh_token_body or refresh_token_cookie or ""
+
+    if not refresh_token:
+        return create_error_response(
+            code="INVALID_TOKEN",
+            message="Refresh token is required",
+        )
+
+    result = await auth_service.refresh_token(refresh_token)
     if not result.success:
         return create_error_response(
             code=result.error_code.value,
             message=result.error_message,
         )
+
+    # Set new tokens in cookies
+    _set_auth_cookies(response, result.data.access_token, result.data.refresh_token)
+
     return create_success_response(result.data)
 
 
@@ -176,7 +195,8 @@ async def refresh_access_token(
 )
 async def get_current_user_profile(
     current_user: CurrentUserDep,
-) -> ApiResponse[UserResponse]:
+    auth_service: AuthServiceDep,
+) -> ApiResponse[UserResponse] | JSONResponse:
     result = await auth_service.get_current_user(current_user.id)
     if not result.success:
         return create_error_response(
@@ -194,6 +214,7 @@ async def get_current_user_profile(
 async def logout(
     response: Response,
     current_user: CurrentUserDep,
+    auth_service: AuthServiceDep,
     request: LogoutRequest,
     refresh_token_cookie: Annotated[str | None, Cookie(alias="refresh_token")] = None,
 ) -> ApiResponse[LogoutResponse]:

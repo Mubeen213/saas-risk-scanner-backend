@@ -15,6 +15,16 @@ from app.schemas.common import (
     create_error_response,
     create_success_response,
 )
+from app.schemas.integration import (
+    ConnectionListResponse,
+    ConnectionResponse,
+    DisconnectResponse,
+    IntegrationCallbackRequest,
+    IntegrationConnectRequest,
+    IntegrationConnectResponse,
+    SyncRequest,
+    SyncResponse,
+)
 from app.schemas.organization import OrganizationResponse
 from app.schemas.plan import PlanResponse
 from app.schemas.role import RoleResponse
@@ -38,4 +48,12 @@ __all__ = [
     "LogoutResponse",
     "RefreshTokenRequest",
     "LogoutRequest",
+    "IntegrationConnectRequest",
+    "IntegrationConnectResponse",
+    "IntegrationCallbackRequest",
+    "ConnectionResponse",
+    "ConnectionListResponse",
+    "SyncRequest",
+    "SyncResponse",
+    "DisconnectResponse",
 ]

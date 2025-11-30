@@ -109,6 +109,74 @@ Avoid business rules here.
 
 ---
 
+
+### **Dependency Injection (DI) & Wiring**
+
+We use **Strict Constructor Injection** to decouple layers and manage database lifecycles. All wiring logic must reside in `dependencies.py`.
+
+#### **The Dependency Chain**
+
+The application follows a strict hierarchical injection flow:
+
+1.  **DB Connection** is injected into → **Repositories**.
+2.  **Repositories** are injected into → **Services**.
+3.  **Services** are injected into → **Controllers**.
+
+#### **Implementation Rules**
+
+**1. The Wiring Layer (`dependencies.py`)**
+
+  * This is the **only** place where classes are instantiated.
+  * Must define `Depends()` chains to assemble the object graph.
+  * Must handle the `async with` database session lifecycle here.
+
+<!-- end list -->
+
+```python
+# dependencies.py pattern
+def get_user_repo(conn = Depends(get_db_connection)) -> UserRepository:
+    return UserRepository(conn)
+
+def get_user_service(repo: UserRepository = Depends(get_user_repo)) -> UserService:
+    return UserService(user_repository=repo)
+```
+
+**2. Services (`services/`)**
+
+  * Must define dependencies in `__init__`.
+  * **Must NOT** use `Depends()` (Services are framework-agnostic).
+  * **Must NOT** instantiate repositories manually (e.g., `self.repo = UserRepo()`).
+
+
+```python
+# Correct Service Pattern
+class UserService:
+    def __init__(self, user_repository: UserRepository):
+        self.user_repository = user_repository
+```
+
+**3. Controllers (`api/`)**
+
+  * Must never import or instantiate Repositories directly.
+  * Must inject the fully assembled Service using `Depends`.
+  * Must never handle database connections (`async with` blocks) directly.
+
+```python
+# Correct Controller Pattern
+@router.post("/users")
+async def create_user(
+    service: UserService = Depends(get_user_service) # Fully wired
+):
+    return await service.create(...)
+```
+
+**4. Repositories (`repositories/`)**
+
+  * Must accept the database connection/session in `__init__`.
+  * Must not create their own connections.
+
+-----
+
 ### API Response structures:
 
 #### We must use this consistent api response format for all the endpoints

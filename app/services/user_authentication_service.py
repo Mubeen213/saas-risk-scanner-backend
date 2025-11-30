@@ -1,8 +1,7 @@
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import uuid4
-
-import asyncpg
 
 from app.constants.auth_errors import AUTH_ERROR_MESSAGES, AuthErrorCode
 from app.constants.enums import (
@@ -16,17 +15,19 @@ from app.core.settings import settings
 from app.dtos.organization_dtos import CreateOrganizationDTO
 from app.dtos.user_dtos import CreateUserDTO, UpdateUserDTO
 from app.oauth.types import OAuthUserInfo
-from app.repositories.organization_repository import organization_repository
-from app.repositories.plan_repository import plan_repository
-from app.repositories.role_repository import role_repository
-from app.repositories.user_repository import user_repository
+from app.repositories.organization_repository import OrganizationRepository
+from app.repositories.plan_repository import PlanRepository
+from app.repositories.role_repository import RoleRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.auth import AuthSuccessResponse
 from app.schemas.organization import OrganizationResponse
 from app.schemas.plan import PlanResponse
 from app.schemas.role import RoleResponse
 from app.schemas.user import UserResponse
-from app.services.domain_validator_service import domain_validator_service
+from app.services.domain_validator_service import DomainValidatorService
 from app.utils.slug_generator import generate_org_name_from_domain, generate_org_slug
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,42 +45,60 @@ class AuthResult:
 
 class UserAuthenticationService:
 
-    async def authenticate_with_oauth(
-        self, conn: asyncpg.Connection, user_info: OAuthUserInfo
-    ) -> AuthResult:
-        if not domain_validator_service.is_valid_company_domain(user_info.email):
+    def __init__(
+        self,
+        user_repository: UserRepository,
+        organization_repository: OrganizationRepository,
+        plan_repository: PlanRepository,
+        role_repository: RoleRepository,
+        domain_validator_service: DomainValidatorService,
+    ):
+        self._user_repository = user_repository
+        self._organization_repository = organization_repository
+        self._plan_repository = plan_repository
+        self._role_repository = role_repository
+        self._domain_validator_service = domain_validator_service
+
+    async def authenticate_with_oauth(self, user_info: OAuthUserInfo) -> AuthResult:
+        if not self._domain_validator_service.is_valid_company_domain(user_info.email):
+            logger.warning("Invalid company domain for email: %s", user_info.email)
             return AuthResult(
                 success=False,
                 error_code=AuthErrorCode.INVALID_EMAIL_DOMAIN,
             )
 
-        existing_user = await user_repository.find_by_provider_id(
-            conn, user_info.provider_user_id
+        existing_user = await self._user_repository.find_by_provider_id(
+            user_info.provider_user_id
         )
         if existing_user:
-            return await self._process_existing_user(conn, existing_user.id, user_info)
+            logger.info("Existing user found by provider ID: %s", user_info.email)
+            return await self._process_existing_user(existing_user.id, user_info)
 
-        invited_user = await user_repository.find_by_email(conn, user_info.email)
+        invited_user = await self._user_repository.find_by_email(user_info.email)
         if invited_user:
-            return await self._process_invited_user(conn, invited_user.id, user_info)
+            logger.info("Invited user found by email: %s", user_info.email)
+            return await self._process_invited_user(invited_user.id, user_info)
 
-        return await self._process_new_signup(conn, user_info)
+        logger.info("New signup initiated for: %s", user_info.email)
+        return await self._process_new_signup(user_info)
 
     async def _process_existing_user(
-        self, conn: asyncpg.Connection, user_id: int, user_info: OAuthUserInfo
+        self, user_id: int, user_info: OAuthUserInfo
     ) -> AuthResult:
-        user = await user_repository.find_by_id(conn, user_id)
+        user = await self._user_repository.find_by_id(user_id)
         if user is None:
             return AuthResult(success=False, error_code=AuthErrorCode.USER_NOT_FOUND)
 
         if user.status == UserStatus.SUSPENDED.value:
+            logger.warning("User suspended: %s", user.email)
             return AuthResult(success=False, error_code=AuthErrorCode.USER_SUSPENDED)
 
         if user.status == UserStatus.DEACTIVATED.value:
+            logger.warning("User deactivated: %s", user.email)
             return AuthResult(success=False, error_code=AuthErrorCode.USER_DEACTIVATED)
 
-        organization = await organization_repository.find_by_id(
-            conn, user.organization_id
+        organization = await self._organization_repository.find_by_id(
+            user.organization_id
         )
         if organization is None:
             return AuthResult(
@@ -87,6 +106,7 @@ class UserAuthenticationService:
             )
 
         if organization.status == OrganizationStatus.SUSPENDED.value:
+            logger.warning("Organization suspended: %s", organization.name)
             return AuthResult(
                 success=False, error_code=AuthErrorCode.ORGANIZATION_SUSPENDED
             )
@@ -101,34 +121,40 @@ class UserAuthenticationService:
             update_dto.status = UserStatus.ACTIVE.value
             update_dto.joined_at = datetime.utcnow()
 
-        updated_user = await user_repository.update(conn, user_id, update_dto)
+        updated_user = await self._user_repository.update(user_id, update_dto)
         if updated_user is None:
             return AuthResult(success=False, error_code=AuthErrorCode.UPDATE_FAILED)
 
-        return await self._build_auth_response(conn, updated_user.id, is_new_user=False)
+        return await self._build_auth_response(updated_user.id, is_new_user=False)
 
     async def _process_invited_user(
-        self, conn: asyncpg.Connection, user_id: int, user_info: OAuthUserInfo
+        self, user_id: int, user_info: OAuthUserInfo
     ) -> AuthResult:
-        user = await user_repository.find_by_id(conn, user_id)
+        user = await self._user_repository.find_by_id(user_id)
         if user is None:
             return AuthResult(success=False, error_code=AuthErrorCode.USER_NOT_FOUND)
 
         if user.status != UserStatus.PENDING_INVITATION.value:
+            logger.warning("Invalid user state for invited user: %s", user.email)
             return AuthResult(
                 success=False, error_code=AuthErrorCode.INVALID_USER_STATE
             )
 
-        organization = await organization_repository.find_by_id(
-            conn, user.organization_id
+        organization = await self._organization_repository.find_by_id(
+            user.organization_id
         )
         if organization is None:
             return AuthResult(
                 success=False, error_code=AuthErrorCode.ORGANIZATION_NOT_FOUND
             )
 
-        user_domain = domain_validator_service.extract_domain(user_info.email)
+        user_domain = self._domain_validator_service.extract_domain(user_info.email)
         if organization.domain and organization.domain.lower() != user_domain:
+            logger.warning(
+                "Domain mismatch: user=%s, org=%s",
+                user_domain,
+                organization.domain,
+            )
             return AuthResult(success=False, error_code=AuthErrorCode.DOMAIN_MISMATCH)
 
         now = datetime.utcnow()
@@ -142,32 +168,32 @@ class UserAuthenticationService:
             last_login_at=now,
         )
 
-        updated_user = await user_repository.update(conn, user_id, update_dto)
+        updated_user = await self._user_repository.update(user_id, update_dto)
         if updated_user is None:
             return AuthResult(success=False, error_code=AuthErrorCode.UPDATE_FAILED)
 
-        return await self._build_auth_response(conn, updated_user.id, is_new_user=False)
+        logger.info("Invited user activated: %s", user_info.email)
+        return await self._build_auth_response(updated_user.id, is_new_user=False)
 
-    async def _process_new_signup(
-        self, conn: asyncpg.Connection, user_info: OAuthUserInfo
-    ) -> AuthResult:
-        domain = domain_validator_service.extract_domain(user_info.email)
+    async def _process_new_signup(self, user_info: OAuthUserInfo) -> AuthResult:
+        domain = self._domain_validator_service.extract_domain(user_info.email)
 
-        existing_org = await organization_repository.find_by_domain(conn, domain)
+        existing_org = await self._organization_repository.find_by_domain(domain)
         if existing_org:
+            logger.warning("Organization already exists for domain: %s", domain)
             return AuthResult(
                 success=False, error_code=AuthErrorCode.ORGANIZATION_EXISTS
             )
 
-        free_plan = await plan_repository.find_by_name(conn, PlanName.FREE.value)
+        free_plan = await self._plan_repository.find_by_name(PlanName.FREE.value)
         if free_plan is None:
             return AuthResult(success=False, error_code=AuthErrorCode.PLAN_NOT_FOUND)
 
-        owner_role = await role_repository.find_by_name(conn, RoleName.OWNER.value)
+        owner_role = await self._role_repository.find_by_name(RoleName.OWNER.value)
         if owner_role is None:
             return AuthResult(success=False, error_code=AuthErrorCode.ROLE_NOT_FOUND)
 
-        org_slug = await self._generate_unique_slug(conn, domain)
+        org_slug = await self._generate_unique_slug(domain)
         org_dto = CreateOrganizationDTO(
             name=generate_org_name_from_domain(domain),
             slug=org_slug,
@@ -175,7 +201,8 @@ class UserAuthenticationService:
             plan_id=free_plan.id,
             status=OrganizationStatus.ACTIVE.value,
         )
-        organization = await organization_repository.create(conn, org_dto)
+        organization = await self._organization_repository.create(org_dto)
+        logger.info("Organization created: %s", organization.name)
 
         now = datetime.utcnow()
         user_dto = CreateUserDTO(
@@ -190,40 +217,39 @@ class UserAuthenticationService:
             joined_at=now,
             last_login_at=now,
         )
-        created_user = await user_repository.create(conn, user_dto)
+        created_user = await self._user_repository.create(user_dto)
         if created_user is None:
             return AuthResult(
                 success=False, error_code=AuthErrorCode.USER_CREATION_FAILED
             )
 
-        return await self._build_auth_response(conn, created_user.id, is_new_user=True)
+        logger.info("User created: %s", user_info.email)
+        return await self._build_auth_response(created_user.id, is_new_user=True)
 
-    async def _generate_unique_slug(self, conn: asyncpg.Connection, domain: str) -> str:
+    async def _generate_unique_slug(self, domain: str) -> str:
         slug = generate_org_slug(domain)
-        while await organization_repository.find_by_slug(conn, slug):
+        while await self._organization_repository.find_by_slug(slug):
             slug = generate_org_slug(domain)
         return slug
 
-    async def _build_auth_response(
-        self, conn: asyncpg.Connection, user_id: int, is_new_user: bool
-    ) -> AuthResult:
-        user = await user_repository.find_by_id(conn, user_id)
+    async def _build_auth_response(self, user_id: int, is_new_user: bool) -> AuthResult:
+        user = await self._user_repository.find_by_id(user_id)
         if user is None:
             return AuthResult(success=False, error_code=AuthErrorCode.USER_NOT_FOUND)
 
-        organization = await organization_repository.find_by_id(
-            conn, user.organization_id
+        organization = await self._organization_repository.find_by_id(
+            user.organization_id
         )
         if organization is None:
             return AuthResult(
                 success=False, error_code=AuthErrorCode.ORGANIZATION_NOT_FOUND
             )
 
-        role = await role_repository.find_by_id(conn, user.role_id)
+        role = await self._role_repository.find_by_id(user.role_id)
         if role is None:
             return AuthResult(success=False, error_code=AuthErrorCode.ROLE_NOT_FOUND)
 
-        plan = await plan_repository.find_by_id(conn, organization.plan_id)
+        plan = await self._plan_repository.find_by_id(organization.plan_id)
         if plan is None:
             return AuthResult(success=False, error_code=AuthErrorCode.PLAN_NOT_FOUND)
 
@@ -274,6 +300,3 @@ class UserAuthenticationService:
             is_new_user=is_new_user,
         )
         return AuthResult(success=True, data=response)
-
-
-user_authentication_service = UserAuthenticationService()
