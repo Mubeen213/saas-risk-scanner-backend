@@ -8,6 +8,12 @@ from app.dtos.integration.discovery_dtos import (
     CreateDiscoveredAppDTO,
     UpdateDiscoveredAppDTO,
 )
+from app.dtos.workspace_dtos import (
+    AppWithAuthorizationsDTO,
+    AuthorizationWithUserDTO,
+    DiscoveredAppWithUserCountDTO,
+    PaginationParamsDTO,
+)
 from app.models.discovered_app import DiscoveredApp
 
 
@@ -153,4 +159,177 @@ class DiscoveredAppRepository:
             raw_data=raw_data or {},
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+        )
+
+    async def find_paginated_with_user_count(
+        self, organization_id: int, params: PaginationParamsDTO
+    ) -> tuple[list[DiscoveredAppWithUserCountDTO], int]:
+        offset = (params.page - 1) * params.page_size
+        search_pattern = f"%{params.search}%" if params.search else None
+
+        if search_pattern:
+            count_query = """
+                SELECT COUNT(*) as total
+                FROM discovered_app
+                WHERE organization_id = :organization_id
+                  AND (display_name ILIKE :search OR client_id ILIKE :search)
+            """
+            count_query, count_values = bind_named(
+                count_query,
+                {"organization_id": organization_id, "search": search_pattern},
+            )
+        else:
+            count_query = """
+                SELECT COUNT(*) as total
+                FROM discovered_app
+                WHERE organization_id = :organization_id
+            """
+            count_query, count_values = bind_named(
+                count_query,
+                {"organization_id": organization_id},
+            )
+        count_row = await self._conn.fetchrow(count_query, *count_values)
+        total = count_row["total"] if count_row else 0
+
+        if search_pattern:
+            query = """
+                SELECT 
+                    da.id, da.display_name, da.client_id, da.client_type,
+                    da.status, da.first_seen_at, da.last_seen_at, da.all_scopes,
+                    COUNT(aa.id) FILTER (WHERE aa.status = 'active') as authorized_users_count
+                FROM discovered_app da
+                LEFT JOIN app_authorization aa ON aa.discovered_app_id = da.id
+                WHERE da.organization_id = :organization_id
+                  AND (da.display_name ILIKE :search OR da.client_id ILIKE :search)
+                GROUP BY da.id
+                ORDER BY da.last_seen_at DESC
+                LIMIT :page_size OFFSET :offset
+            """
+            query, values = bind_named(
+                query,
+                {
+                    "organization_id": organization_id,
+                    "search": search_pattern,
+                    "page_size": params.page_size,
+                    "offset": offset,
+                },
+            )
+        else:
+            query = """
+                SELECT 
+                    da.id, da.display_name, da.client_id, da.client_type,
+                    da.status, da.first_seen_at, da.last_seen_at, da.all_scopes,
+                    COUNT(aa.id) FILTER (WHERE aa.status = 'active') as authorized_users_count
+                FROM discovered_app da
+                LEFT JOIN app_authorization aa ON aa.discovered_app_id = da.id
+                WHERE da.organization_id = :organization_id
+                GROUP BY da.id
+                ORDER BY da.last_seen_at DESC
+                LIMIT :page_size OFFSET :offset
+            """
+            query, values = bind_named(
+                query,
+                {
+                    "organization_id": organization_id,
+                    "page_size": params.page_size,
+                    "offset": offset,
+                },
+            )
+        rows = await self._conn.fetch(query, *values)
+
+        apps = []
+        for row in rows:
+            all_scopes = row["all_scopes"]
+            if isinstance(all_scopes, str):
+                import json
+
+                all_scopes = json.loads(all_scopes)
+            apps.append(
+                DiscoveredAppWithUserCountDTO(
+                    id=row["id"],
+                    display_name=row["display_name"],
+                    client_id=row["client_id"],
+                    client_type=row["client_type"],
+                    status=row["status"],
+                    first_seen_at=row["first_seen_at"],
+                    last_seen_at=row["last_seen_at"],
+                    scopes_count=len(all_scopes) if all_scopes else 0,
+                    authorized_users_count=row["authorized_users_count"],
+                )
+            )
+        return apps, total
+
+    async def count_by_organization(self, organization_id: int) -> int:
+        query = """
+            SELECT COUNT(*) as count
+            FROM discovered_app
+            WHERE organization_id = :organization_id
+        """
+        query, values = bind_named(query, {"organization_id": organization_id})
+        row = await self._conn.fetchrow(query, *values)
+        return row["count"] if row else 0
+
+    async def find_with_authorizations(
+        self, organization_id: int, app_id: int
+    ) -> AppWithAuthorizationsDTO | None:
+        app_query = """
+            SELECT id, display_name, client_id, client_type, status, 
+                   all_scopes, first_seen_at, last_seen_at
+            FROM discovered_app
+            WHERE id = :app_id AND organization_id = :organization_id
+        """
+        app_query, app_values = bind_named(
+            app_query, {"app_id": app_id, "organization_id": organization_id}
+        )
+        app_row = await self._conn.fetchrow(app_query, *app_values)
+        if not app_row:
+            return None
+
+        all_scopes = app_row["all_scopes"]
+        if isinstance(all_scopes, str):
+            import json
+
+            all_scopes = json.loads(all_scopes)
+
+        auth_query = """
+            SELECT 
+                wu.id as user_id, wu.email, wu.full_name, wu.avatar_url,
+                aa.scopes, aa.authorized_at, aa.status
+            FROM app_authorization aa
+            JOIN workspace_user wu ON wu.id = aa.workspace_user_id
+            WHERE aa.discovered_app_id = :app_id
+            ORDER BY aa.authorized_at DESC
+        """
+        auth_query, auth_values = bind_named(auth_query, {"app_id": app_id})
+        auth_rows = await self._conn.fetch(auth_query, *auth_values)
+
+        authorizations = []
+        for row in auth_rows:
+            scopes = row["scopes"]
+            if isinstance(scopes, str):
+                import json
+
+                scopes = json.loads(scopes)
+            authorizations.append(
+                AuthorizationWithUserDTO(
+                    user_id=row["user_id"],
+                    email=row["email"],
+                    full_name=row["full_name"],
+                    avatar_url=row["avatar_url"],
+                    scopes=scopes or [],
+                    authorized_at=row["authorized_at"],
+                    status=row["status"],
+                )
+            )
+
+        return AppWithAuthorizationsDTO(
+            id=app_row["id"],
+            display_name=app_row["display_name"],
+            client_id=app_row["client_id"],
+            client_type=app_row["client_type"],
+            status=app_row["status"],
+            all_scopes=all_scopes or [],
+            first_seen_at=app_row["first_seen_at"],
+            last_seen_at=app_row["last_seen_at"],
+            authorizations=authorizations,
         )

@@ -7,6 +7,12 @@ from app.dtos.integration.workspace_dtos import (
     CreateWorkspaceUserDTO,
     UpdateWorkspaceUserDTO,
 )
+from app.dtos.workspace_dtos import (
+    AuthorizationWithAppDTO,
+    PaginationParamsDTO,
+    UserWithAuthorizationsDTO,
+    WorkspaceUserWithAppCountDTO,
+)
 from app.models.workspace_user import WorkspaceUser
 
 
@@ -217,4 +223,160 @@ class WorkspaceUserRepository:
             last_synced_at=row["last_synced_at"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+        )
+
+    async def find_paginated_with_app_count(
+        self, organization_id: int, params: PaginationParamsDTO
+    ) -> tuple[list[WorkspaceUserWithAppCountDTO], int]:
+        offset = (params.page - 1) * params.page_size
+        search_pattern = f"%{params.search}%" if params.search else None
+
+        if search_pattern:
+            count_query = """
+                SELECT COUNT(*) as total
+                FROM workspace_user
+                WHERE organization_id = :organization_id
+                  AND (email ILIKE :search OR full_name ILIKE :search)
+            """
+            count_query, count_values = bind_named(
+                count_query,
+                {"organization_id": organization_id, "search": search_pattern},
+            )
+        else:
+            count_query = """
+                SELECT COUNT(*) as total
+                FROM workspace_user
+                WHERE organization_id = :organization_id
+            """
+            count_query, count_values = bind_named(
+                count_query,
+                {"organization_id": organization_id},
+            )
+        count_row = await self._conn.fetchrow(count_query, *count_values)
+        total = count_row["total"] if count_row else 0
+
+        if search_pattern:
+            query = """
+                SELECT 
+                    wu.id, wu.email, wu.full_name, wu.avatar_url,
+                    wu.is_admin, wu.is_delegated_admin, wu.status,
+                    COUNT(aa.id) FILTER (WHERE aa.status = 'active') as authorized_apps_count
+                FROM workspace_user wu
+                LEFT JOIN app_authorization aa ON aa.workspace_user_id = wu.id
+                WHERE wu.organization_id = :organization_id
+                  AND (wu.email ILIKE :search OR wu.full_name ILIKE :search)
+                GROUP BY wu.id
+                ORDER BY wu.email
+                LIMIT :page_size OFFSET :offset
+            """
+            query, values = bind_named(
+                query,
+                {
+                    "organization_id": organization_id,
+                    "search": search_pattern,
+                    "page_size": params.page_size,
+                    "offset": offset,
+                },
+            )
+        else:
+            query = """
+                SELECT 
+                    wu.id, wu.email, wu.full_name, wu.avatar_url,
+                    wu.is_admin, wu.is_delegated_admin, wu.status,
+                    COUNT(aa.id) FILTER (WHERE aa.status = 'active') as authorized_apps_count
+                FROM workspace_user wu
+                LEFT JOIN app_authorization aa ON aa.workspace_user_id = wu.id
+                WHERE wu.organization_id = :organization_id
+                GROUP BY wu.id
+                ORDER BY wu.email
+                LIMIT :page_size OFFSET :offset
+            """
+            query, values = bind_named(
+                query,
+                {
+                    "organization_id": organization_id,
+                    "page_size": params.page_size,
+                    "offset": offset,
+                },
+            )
+        rows = await self._conn.fetch(query, *values)
+        users = [
+            WorkspaceUserWithAppCountDTO(
+                id=row["id"],
+                email=row["email"],
+                full_name=row["full_name"],
+                avatar_url=row["avatar_url"],
+                is_admin=row["is_admin"],
+                is_delegated_admin=row["is_delegated_admin"],
+                status=row["status"],
+                authorized_apps_count=row["authorized_apps_count"],
+            )
+            for row in rows
+        ]
+        return users, total
+
+    async def count_by_organization(self, organization_id: int) -> int:
+        query = """
+            SELECT COUNT(*) as count
+            FROM workspace_user
+            WHERE organization_id = :organization_id
+        """
+        query, values = bind_named(query, {"organization_id": organization_id})
+        row = await self._conn.fetchrow(query, *values)
+        return row["count"] if row else 0
+
+    async def find_with_authorizations(
+        self, organization_id: int, user_id: int
+    ) -> UserWithAuthorizationsDTO | None:
+        user_query = """
+            SELECT id, email, full_name, avatar_url, is_admin, status, org_unit_path
+            FROM workspace_user
+            WHERE id = :user_id AND organization_id = :organization_id
+        """
+        user_query, user_values = bind_named(
+            user_query, {"user_id": user_id, "organization_id": organization_id}
+        )
+        user_row = await self._conn.fetchrow(user_query, *user_values)
+        if not user_row:
+            return None
+
+        auth_query = """
+            SELECT 
+                da.id as app_id, da.display_name as app_name, da.client_id,
+                aa.scopes, aa.authorized_at, aa.status
+            FROM app_authorization aa
+            JOIN discovered_app da ON da.id = aa.discovered_app_id
+            WHERE aa.workspace_user_id = :user_id
+            ORDER BY aa.authorized_at DESC
+        """
+        auth_query, auth_values = bind_named(auth_query, {"user_id": user_id})
+        auth_rows = await self._conn.fetch(auth_query, *auth_values)
+
+        authorizations = []
+        for row in auth_rows:
+            scopes = row["scopes"]
+            if isinstance(scopes, str):
+                import json
+
+                scopes = json.loads(scopes)
+            authorizations.append(
+                AuthorizationWithAppDTO(
+                    app_id=row["app_id"],
+                    app_name=row["app_name"],
+                    client_id=row["client_id"],
+                    scopes=scopes or [],
+                    authorized_at=row["authorized_at"],
+                    status=row["status"],
+                )
+            )
+
+        return UserWithAuthorizationsDTO(
+            id=user_row["id"],
+            email=user_row["email"],
+            full_name=user_row["full_name"],
+            avatar_url=user_row["avatar_url"],
+            is_admin=user_row["is_admin"],
+            status=user_row["status"],
+            org_unit_path=user_row["org_unit_path"],
+            authorizations=authorizations,
         )

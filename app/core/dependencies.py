@@ -29,6 +29,7 @@ from app.services.auth_service import AuthService
 from app.services.domain_validator_service import DomainValidatorService
 from app.services.integration_service import IntegrationService
 from app.services.user_authentication_service import UserAuthenticationService
+from app.services.workspace_data_service import WorkspaceDataService
 from app.services.workspace_sync_service import WorkspaceSyncService
 
 logger = logging.getLogger(__name__)
@@ -284,3 +285,34 @@ WorkspaceSyncServiceDep = Annotated[
     WorkspaceSyncService, Depends(get_workspace_sync_service)
 ]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_workspace_data_service(
+    connection_repository: IdentityProviderConnectionRepository = Depends(
+        get_identity_provider_connection_repository
+    ),
+    workspace_user_repository: WorkspaceUserRepository = Depends(
+        get_workspace_user_repository
+    ),
+    workspace_group_repository: WorkspaceGroupRepository = Depends(
+        get_workspace_group_repository
+    ),
+    discovered_app_repository: DiscoveredAppRepository = Depends(
+        get_discovered_app_repository
+    ),
+    app_authorization_repository: AppAuthorizationRepository = Depends(
+        get_app_authorization_repository
+    ),
+) -> WorkspaceDataService:
+    return WorkspaceDataService(
+        connection_repository=connection_repository,
+        workspace_user_repository=workspace_user_repository,
+        workspace_group_repository=workspace_group_repository,
+        discovered_app_repository=discovered_app_repository,
+        app_authorization_repository=app_authorization_repository,
+    )
+
+
+WorkspaceDataServiceDep = Annotated[
+    WorkspaceDataService, Depends(get_workspace_data_service)
+]

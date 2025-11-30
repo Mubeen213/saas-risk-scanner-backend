@@ -140,6 +140,16 @@ class AppAuthorizationRepository:
         row = await self._conn.fetchrow(query, discovered_app_id)
         return row["count"] if row else 0
 
+    async def count_active_by_organization(self, organization_id: int) -> int:
+        query = """
+            SELECT COUNT(*) as count
+            FROM app_authorization aa
+            JOIN workspace_user wu ON wu.id = aa.workspace_user_id
+            WHERE wu.organization_id = $1 AND aa.status = 'active'
+        """
+        row = await self._conn.fetchrow(query, organization_id)
+        return row["count"] if row else 0
+
     def _map_to_model(self, row: asyncpg.Record | None) -> AppAuthorization | None:
         if row is None:
             return None

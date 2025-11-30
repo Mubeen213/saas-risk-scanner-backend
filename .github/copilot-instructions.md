@@ -41,8 +41,8 @@ app/
 │
 ├── models/                       # DATABASE TABLES
 │   ├── __init__.py
-│   ├── users.py                  # DB Table definition for 'users'
-│   └── organizations.py          # DB Table definition for 'organizations'
+│   ├── user.py                  # DB Table definition for 'users'
+│   └── organization.py          # DB Table definition for 'organizations'
 ```
 
 ---
@@ -323,7 +323,7 @@ No `Any` unless absolutely unavoidable.
     async def exchange_code_for_tokens(
         self, identityProvider: OAuthProvider, config: OAuthConfig, code: str
     ) -> OAuthResult:
-        tokens = await identityProvider.exchange_code(config, code)
+        tokens: OAuthTokens = await identityProvider.exchange_code(config, code)
         if tokens is None:
             return OAuthResult(
                 success=False,

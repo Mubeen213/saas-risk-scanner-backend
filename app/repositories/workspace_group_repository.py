@@ -8,6 +8,12 @@ from app.dtos.integration.workspace_dtos import (
     CreateWorkspaceGroupDTO,
     UpdateWorkspaceGroupDTO,
 )
+from app.dtos.workspace_dtos import (
+    GroupMemberWithUserDTO,
+    GroupWithMembersDTO,
+    PaginationParamsDTO,
+    WorkspaceGroupWithMemberCountDTO,
+)
 from app.models.group_membership import GroupMembership
 from app.models.workspace_group import WorkspaceGroup
 
@@ -160,4 +166,140 @@ class WorkspaceGroupRepository:
             last_synced_at=row["last_synced_at"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+        )
+
+    async def find_paginated_with_member_count(
+        self, organization_id: int, params: PaginationParamsDTO
+    ) -> tuple[list[WorkspaceGroupWithMemberCountDTO], int]:
+        offset = (params.page - 1) * params.page_size
+        search_pattern = f"%{params.search}%" if params.search else None
+
+        if search_pattern:
+            count_query = """
+                SELECT COUNT(*) as total
+                FROM workspace_group
+                WHERE organization_id = :organization_id
+                  AND (name ILIKE :search OR email ILIKE :search)
+            """
+            count_query, count_values = bind_named(
+                count_query,
+                {"organization_id": organization_id, "search": search_pattern},
+            )
+        else:
+            count_query = """
+                SELECT COUNT(*) as total
+                FROM workspace_group
+                WHERE organization_id = :organization_id
+            """
+            count_query, count_values = bind_named(
+                count_query,
+                {"organization_id": organization_id},
+            )
+        count_row = await self._conn.fetchrow(count_query, *count_values)
+        total = count_row["total"] if count_row else 0
+
+        if search_pattern:
+            query = """
+                SELECT id, email, name, description, direct_members_count
+                FROM workspace_group
+                WHERE organization_id = :organization_id
+                  AND (name ILIKE :search OR email ILIKE :search)
+                ORDER BY name
+                LIMIT :page_size OFFSET :offset
+            """
+            query, values = bind_named(
+                query,
+                {
+                    "organization_id": organization_id,
+                    "search": search_pattern,
+                    "page_size": params.page_size,
+                    "offset": offset,
+                },
+            )
+        else:
+            query = """
+                SELECT id, email, name, description, direct_members_count
+                FROM workspace_group
+                WHERE organization_id = :organization_id
+                ORDER BY name
+                LIMIT :page_size OFFSET :offset
+            """
+            query, values = bind_named(
+                query,
+                {
+                    "organization_id": organization_id,
+                    "page_size": params.page_size,
+                    "offset": offset,
+                },
+            )
+        rows = await self._conn.fetch(query, *values)
+        groups = [
+            WorkspaceGroupWithMemberCountDTO(
+                id=row["id"],
+                email=row["email"],
+                name=row["name"],
+                description=row["description"],
+                direct_members_count=row["direct_members_count"],
+            )
+            for row in rows
+        ]
+        return groups, total
+
+    async def count_by_organization(self, organization_id: int) -> int:
+        query = """
+            SELECT COUNT(*) as count
+            FROM workspace_group
+            WHERE organization_id = :organization_id
+        """
+        query, values = bind_named(query, {"organization_id": organization_id})
+        row = await self._conn.fetchrow(query, *values)
+        return row["count"] if row else 0
+
+    async def find_with_members(
+        self, organization_id: int, group_id: int
+    ) -> GroupWithMembersDTO | None:
+        group_query = """
+            SELECT id, email, name, description, direct_members_count
+            FROM workspace_group
+            WHERE id = :group_id AND organization_id = :organization_id
+        """
+        group_query, group_values = bind_named(
+            group_query, {"group_id": group_id, "organization_id": organization_id}
+        )
+        group_row = await self._conn.fetchrow(group_query, *group_values)
+        if not group_row:
+            return None
+
+        members_query = """
+            SELECT 
+                wu.id as user_id, wu.email, wu.full_name, wu.avatar_url,
+                gm.role
+            FROM group_membership gm
+            JOIN workspace_user wu ON wu.id = gm.workspace_user_id
+            WHERE gm.workspace_group_id = :group_id
+            ORDER BY wu.email
+        """
+        members_query, members_values = bind_named(
+            members_query, {"group_id": group_id}
+        )
+        member_rows = await self._conn.fetch(members_query, *members_values)
+
+        members = [
+            GroupMemberWithUserDTO(
+                user_id=row["user_id"],
+                email=row["email"],
+                full_name=row["full_name"],
+                avatar_url=row["avatar_url"],
+                role=row["role"],
+            )
+            for row in member_rows
+        ]
+
+        return GroupWithMembersDTO(
+            id=group_row["id"],
+            email=group_row["email"],
+            name=group_row["name"],
+            description=group_row["description"],
+            direct_members_count=group_row["direct_members_count"],
+            members=members,
         )
