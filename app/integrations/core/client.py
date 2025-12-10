@@ -184,6 +184,9 @@ class ApiClient:
         async with client.request(http_method, request.url, **kwargs) as response:
             try:
                 data = await response.json()
+                logger.debug(f"=" * 60)
+                logger.debug(f"Received response data: {data}")
+                logger.debug(f"=" * 60)
             except aiohttp.ContentTypeError:
                 data = {}
 

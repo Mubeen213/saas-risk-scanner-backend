@@ -102,6 +102,8 @@ class WorkspaceSyncService:
             logger.debug(
                 f"Auth config loaded for identity provider: {identity_provider.slug} and authConfig: {auth_config}"
             )
+            workspace_provider = self._get_workspace_provider(identity_provider.slug)
+            self._credentials_manager.set_provider(workspace_provider)
 
             auth_context = await self._credentials_manager.get_valid_credentials(
                 connection_id, auth_config.client_id, auth_config.client_secret
@@ -304,6 +306,12 @@ class WorkspaceSyncService:
             existing_auth = await self._auth_repo.find_by_app_and_user(app.id, user.id)
             if existing_auth:
                 await self._auth_repo.mark_revoked(existing_auth.id, event.event_time)
+            else:
+                # If we missed the authorize event (e.g. > 180 days old), create it as revoked
+                # so we have a record of the app usage.
+                await self._upsert_authorization(
+                    app.id, user.id, event, status=AuthorizationStatus.REVOKED.value
+                )
 
     async def _upsert_discovered_app(
         self,
@@ -311,9 +319,9 @@ class WorkspaceSyncService:
         event: UnifiedTokenEvent,
     ):
         event_time = event.event_time or datetime.now(timezone.utc)
-        logger.debug(
-            f"Upserting discovered app: {event.app_name} for connection: {connection.id}"
-        )
+        # logger.info(
+        #     f"Upserting discovered app: {event.app_name} for connection: {connection.id}"
+        # )
         dto = CreateDiscoveredAppDTO(
             organization_id=connection.organization_id,
             connection_id=connection.id,
@@ -333,16 +341,17 @@ class WorkspaceSyncService:
         app_id: int,
         user_id: int,
         event: UnifiedTokenEvent,
+        status: str = AuthorizationStatus.ACTIVE.value,
     ) -> None:
         event_time = event.event_time or datetime.now(timezone.utc)
-        logger.debug(
-            f"Upserting app authorization for app_id: {app_id}, user_id: {user_id}"
-        )
+        # logger.debug(
+        #     f"Upserting app authorization for app_id: {app_id}, user_id: {user_id}, status: {status}"
+        # )
         dto = CreateAppAuthorizationDTO(
             discovered_app_id=app_id,
             workspace_user_id=user_id,
             scopes=event.scopes,
-            status=AuthorizationStatus.ACTIVE.value,
+            status=status,
             authorized_at=event_time,
             raw_data=event.raw_data,
         )
