@@ -12,12 +12,14 @@ from app.database import db_connection
 from app.integrations.core.credentials import CredentialsManager
 from app.models.user import User
 from app.oauth.service import OAuthService
-from app.repositories.app_authorization_repository import AppAuthorizationRepository
-from app.repositories.discovered_app_repository import DiscoveredAppRepository
+from app.repositories.app_grant_repo import AppGrantRepository
+from app.repositories.crawl_history_repo import CrawlHistoryRepository
 from app.repositories.identity_provider_connection_repository import (
     IdentityProviderConnectionRepository,
 )
 from app.repositories.identity_provider_repository import IdentityProviderRepository
+from app.repositories.oauth_app_repo import OAuthAppRepository
+from app.repositories.oauth_event_repo import OAuthEventRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.plan_repository import PlanRepository
 from app.repositories.product_auth_config_repository import ProductAuthConfigRepository
@@ -28,9 +30,11 @@ from app.repositories.workspace_user_repository import WorkspaceUserRepository
 from app.services.auth_service import AuthService
 from app.services.domain_validator_service import DomainValidatorService
 from app.services.integration_service import IntegrationService
+from app.services.snapshot_service import SnapshotService
+from app.services.stream_service import StreamService
+from app.services.sync_manager import SyncManager
 from app.services.user_authentication_service import UserAuthenticationService
 from app.services.workspace_data_service import WorkspaceDataService
-from app.services.workspace_sync_service import WorkspaceSyncService
 
 logger = logging.getLogger(__name__)
 
@@ -72,16 +76,28 @@ def get_workspace_group_repository(
     return WorkspaceGroupRepository(conn)
 
 
-def get_discovered_app_repository(
+def get_oauth_app_repository(
     conn: asyncpg.Connection = Depends(get_db_session),
-) -> DiscoveredAppRepository:
-    return DiscoveredAppRepository(conn)
+) -> OAuthAppRepository:
+    return OAuthAppRepository(conn)
 
 
-def get_app_authorization_repository(
+def get_app_grant_repository(
     conn: asyncpg.Connection = Depends(get_db_session),
-) -> AppAuthorizationRepository:
-    return AppAuthorizationRepository(conn)
+) -> AppGrantRepository:
+    return AppGrantRepository(conn)
+
+
+def get_oauth_event_repository(
+    conn: asyncpg.Connection = Depends(get_db_session),
+) -> OAuthEventRepository:
+    return OAuthEventRepository(conn)
+
+
+def get_crawl_history_repository(
+    conn: asyncpg.Connection = Depends(get_db_session),
+) -> CrawlHistoryRepository:
+    return CrawlHistoryRepository(conn)
 
 
 def get_user_repository(
@@ -135,39 +151,42 @@ def get_integration_service(
     )
 
 
-def get_workspace_sync_service(
-    connection_repository: IdentityProviderConnectionRepository = Depends(
+def get_snapshot_service(
+    user_repository: WorkspaceUserRepository = Depends(get_workspace_user_repository),
+    app_repo: OAuthAppRepository = Depends(get_oauth_app_repository),
+    grant_repo: AppGrantRepository = Depends(get_app_grant_repository),
+) -> SnapshotService:
+    return SnapshotService(user_repository, app_repo, grant_repo)
+
+
+def get_stream_service(
+    user_repository: WorkspaceUserRepository = Depends(get_workspace_user_repository),
+    app_repo: OAuthAppRepository = Depends(get_oauth_app_repository),
+    grant_repo: AppGrantRepository = Depends(get_app_grant_repository),
+    event_repo: OAuthEventRepository = Depends(get_oauth_event_repository),
+) -> StreamService:
+    return StreamService(user_repository, app_repo, grant_repo, event_repo)
+
+
+def get_sync_manager(
+    connection_repo: IdentityProviderConnectionRepository = Depends(
         get_identity_provider_connection_repository
     ),
-    identity_provider_repository: IdentityProviderRepository = Depends(
-        get_identity_provider_repository
-    ),
-    auth_config_repository: ProductAuthConfigRepository = Depends(
+    auth_config_repo: ProductAuthConfigRepository = Depends(
         get_product_auth_config_repository
     ),
-    workspace_user_repository: WorkspaceUserRepository = Depends(
-        get_workspace_user_repository
-    ),
-    workspace_group_repository: WorkspaceGroupRepository = Depends(
-        get_workspace_group_repository
-    ),
-    discovered_app_repository: DiscoveredAppRepository = Depends(
-        get_discovered_app_repository
-    ),
-    app_authorization_repository: AppAuthorizationRepository = Depends(
-        get_app_authorization_repository
-    ),
+    crawl_repo: CrawlHistoryRepository = Depends(get_crawl_history_repository),
     credentials_manager: CredentialsManager = Depends(get_credentials_manager),
-) -> WorkspaceSyncService:
-    return WorkspaceSyncService(
-        connection_repository=connection_repository,
-        identity_provider_repository=identity_provider_repository,
-        auth_config_repository=auth_config_repository,
-        workspace_user_repository=workspace_user_repository,
-        workspace_group_repository=workspace_group_repository,
-        discovered_app_repository=discovered_app_repository,
-        app_authorization_repository=app_authorization_repository,
-        credentials_manager=credentials_manager,
+    snapshot_service: SnapshotService = Depends(get_snapshot_service),
+    stream_service: StreamService = Depends(get_stream_service),
+) -> SyncManager:
+    return SyncManager(
+        connection_repo,
+        auth_config_repo,
+        crawl_repo,
+        credentials_manager,
+        snapshot_service,
+        stream_service,
     )
 
 
@@ -281,9 +300,7 @@ async def get_current_user(
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 IntegrationServiceDep = Annotated[IntegrationService, Depends(get_integration_service)]
-WorkspaceSyncServiceDep = Annotated[
-    WorkspaceSyncService, Depends(get_workspace_sync_service)
-]
+SyncManagerDep = Annotated[SyncManager, Depends(get_sync_manager)]
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
@@ -297,19 +314,17 @@ def get_workspace_data_service(
     workspace_group_repository: WorkspaceGroupRepository = Depends(
         get_workspace_group_repository
     ),
-    discovered_app_repository: DiscoveredAppRepository = Depends(
-        get_discovered_app_repository
-    ),
-    app_authorization_repository: AppAuthorizationRepository = Depends(
-        get_app_authorization_repository
-    ),
+    oauth_app_repo: OAuthAppRepository = Depends(get_oauth_app_repository),
+    app_grant_repo: AppGrantRepository = Depends(get_app_grant_repository),
+    oauth_event_repo: OAuthEventRepository = Depends(get_oauth_event_repository),
 ) -> WorkspaceDataService:
     return WorkspaceDataService(
         connection_repository=connection_repository,
         workspace_user_repository=workspace_user_repository,
         workspace_group_repository=workspace_group_repository,
-        discovered_app_repository=discovered_app_repository,
-        app_authorization_repository=app_authorization_repository,
+        oauth_app_repo=oauth_app_repo,
+        app_grant_repo=app_grant_repo,
+        oauth_event_repo=oauth_event_repo,
     )
 
 

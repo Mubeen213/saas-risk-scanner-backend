@@ -5,6 +5,7 @@ GOOGLE_REPORTS_API_BASE = "https://admin.googleapis.com/admin/reports/v1"
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 GOOGLE_USERS_ENDPOINT = f"{GOOGLE_DIRECTORY_API_BASE}/users"
+GOOGLE_USER_TOKENS_ENDPOINT = f"{GOOGLE_DIRECTORY_API_BASE}/users/{{user_key}}/tokens"
 GOOGLE_GROUPS_ENDPOINT = f"{GOOGLE_DIRECTORY_API_BASE}/groups"
 GOOGLE_GROUP_MEMBERS_ENDPOINT = (
     f"{GOOGLE_DIRECTORY_API_BASE}/groups/{{group_key}}/members"

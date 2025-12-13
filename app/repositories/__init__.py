@@ -1,9 +1,11 @@
-from app.repositories.app_authorization_repository import AppAuthorizationRepository
-from app.repositories.discovered_app_repository import DiscoveredAppRepository
+from app.repositories.app_grant_repo import AppGrantRepository
+from app.repositories.crawl_history_repo import CrawlHistoryRepository
 from app.repositories.identity_provider_connection_repository import (
     IdentityProviderConnectionRepository,
 )
 from app.repositories.identity_provider_repository import IdentityProviderRepository
+from app.repositories.oauth_app_repo import OAuthAppRepository
+from app.repositories.oauth_event_repo import OAuthEventRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.plan_repository import PlanRepository
 from app.repositories.product_auth_config_repository import (
@@ -15,10 +17,12 @@ from app.repositories.workspace_group_repository import WorkspaceGroupRepository
 from app.repositories.workspace_user_repository import WorkspaceUserRepository
 
 __all__ = [
-    "AppAuthorizationRepository",
-    "DiscoveredAppRepository",
+    "AppGrantRepository",
+    "CrawlHistoryRepository",
     "IdentityProviderConnectionRepository",
     "IdentityProviderRepository",
+    "OAuthAppRepository",
+    "OAuthEventRepository",
     "OrganizationRepository",
     "PlanRepository",
     "ProductAuthConfigRepository",

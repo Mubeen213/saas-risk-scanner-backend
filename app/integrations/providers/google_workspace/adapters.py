@@ -4,6 +4,7 @@ from typing import Any
 from app.integrations.core.types import (
     UnifiedGroup,
     UnifiedGroupMembership,
+    UnifiedToken,
     UnifiedTokenEvent,
     UnifiedUser,
 )
@@ -117,3 +118,22 @@ def adapt_google_token_events(
         if event:
             events.append(event)
     return events
+
+
+def adapt_google_user_tokens(raw_tokens: list[dict[str, Any]]) -> list[UnifiedToken]:
+    tokens = []
+    for token in raw_tokens:
+        client_id = token.get("clientId")
+        if not client_id:
+            continue
+            
+        tokens.append(
+            UnifiedToken(
+                client_id=client_id,
+                app_name=token.get("displayText", "Unknown App"),
+                scopes=token.get("scopes", []),
+                is_system_app=token.get("nativeApp", False),
+                raw_data=token,
+            )
+        )
+    return tokens

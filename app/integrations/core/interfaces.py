@@ -10,6 +10,7 @@ from app.integrations.core.types import (
     TokenResponse,
     UnifiedGroup,
     UnifiedGroupMembership,
+    UnifiedToken,
     UnifiedTokenEvent,
     UnifiedUser,
 )
@@ -63,6 +64,12 @@ class IWorkspaceProvider(ABC):
     async def fetch_token_events(
         self, auth_context: AuthContext, start_time: str | None = None
     ) -> AsyncGenerator[list[UnifiedTokenEvent], None]:
+        pass
+
+    @abstractmethod
+    async def fetch_user_tokens(
+        self, auth_context: AuthContext, user_id: str
+    ) -> AsyncGenerator[list[UnifiedToken], None]:
         pass
 
     @abstractmethod

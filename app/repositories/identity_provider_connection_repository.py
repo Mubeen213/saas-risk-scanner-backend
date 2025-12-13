@@ -16,9 +16,8 @@ class IdentityProviderConnectionRepository:
 
     _SELECT_FIELDS = """
         id, organization_id, identity_provider_id, connected_by_user_id, status,
-        access_token_encrypted, refresh_token_encrypted, token_expires_at,
+        access_token, refresh_token, token_expires_at,
         scopes_granted, admin_email, workspace_domain,
-        last_sync_started_at, last_sync_completed_at, last_sync_status, last_sync_error,
         last_token_refresh_at, token_refresh_count,
         error_code, error_message,
         created_at, updated_at, deleted_at
@@ -84,11 +83,11 @@ class IdentityProviderConnectionRepository:
         query = f"""
             INSERT INTO identity_provider_connection (
                 organization_id, identity_provider_id, connected_by_user_id, status,
-                access_token_encrypted, refresh_token_encrypted, token_expires_at,
+                access_token, refresh_token, token_expires_at,
                 scopes_granted, admin_email, workspace_domain
             ) VALUES (
                 :organization_id, :identity_provider_id, :connected_by_user_id, :status,
-                :access_token_encrypted, :refresh_token_encrypted, :token_expires_at,
+                :access_token, :refresh_token, :token_expires_at,
                 :scopes_granted, :admin_email, :workspace_domain
             )
             RETURNING {self._SELECT_FIELDS}
@@ -100,8 +99,8 @@ class IdentityProviderConnectionRepository:
             "identity_provider_id": dto.identity_provider_id,
             "connected_by_user_id": dto.connected_by_user_id,
             "status": dto.status,
-            "access_token_encrypted": dto.access_token_encrypted,
-            "refresh_token_encrypted": dto.refresh_token_encrypted,
+            "access_token": dto.access_token,
+            "refresh_token": dto.refresh_token,
             "token_expires_at": dto.token_expires_at,
             "scopes_granted": json.dumps(dto.scopes_granted),
             "admin_email": dto.admin_email,
@@ -133,31 +132,7 @@ class IdentityProviderConnectionRepository:
         row = await self._conn.fetchrow(query, *values)
         return self._map_to_model(row)
 
-    async def update_sync_status(
-        self,
-        connection_id: int,
-        status: str,
-        error: str | None = None,
-    ) -> None:
-        query = """
-            UPDATE identity_provider_connection
-            SET last_sync_status = $1,
-                last_sync_error = $2,
-                last_sync_completed_at = NOW(),
-                updated_at = NOW()
-            WHERE id = $3
-        """
-        await self._conn.execute(query, status, error, connection_id)
 
-    async def mark_sync_started(self, connection_id: int) -> None:
-        query = """
-            UPDATE identity_provider_connection
-            SET last_sync_started_at = NOW(),
-                last_sync_status = 'in_progress',
-                updated_at = NOW()
-            WHERE id = $1
-        """
-        await self._conn.execute(query, connection_id)
 
     async def update_tokens(
         self,
@@ -166,8 +141,8 @@ class IdentityProviderConnectionRepository:
     ) -> None:
         query = """
             UPDATE identity_provider_connection
-            SET access_token_encrypted = $1,
-                refresh_token_encrypted = COALESCE($2, refresh_token_encrypted),
+            SET access_token = $1,
+                refresh_token = COALESCE($2, refresh_token),
                 token_expires_at = $3,
                 last_token_refresh_at = NOW(),
                 token_refresh_count = token_refresh_count + 1,
@@ -176,8 +151,8 @@ class IdentityProviderConnectionRepository:
         """
         await self._conn.execute(
             query,
-            dto.access_token_encrypted,
-            dto.refresh_token_encrypted,
+            dto.access_token,
+            dto.refresh_token,
             dto.token_expires_at,
             connection_id,
         )
@@ -216,22 +191,15 @@ class IdentityProviderConnectionRepository:
         fields: dict[str, Any] = {}
         if dto.status is not None:
             fields["status"] = dto.status
-        if dto.access_token_encrypted is not None:
-            fields["access_token_encrypted"] = dto.access_token_encrypted
-        if dto.refresh_token_encrypted is not None:
-            fields["refresh_token_encrypted"] = dto.refresh_token_encrypted
+        if dto.access_token is not None:
+            fields["access_token"] = dto.access_token
+        if dto.refresh_token is not None:
+            fields["refresh_token"] = dto.refresh_token
         if dto.token_expires_at is not None:
             fields["token_expires_at"] = dto.token_expires_at
         if dto.scopes_granted is not None:
             fields["scopes_granted"] = json.dumps(dto.scopes_granted)
-        if dto.last_sync_started_at is not None:
-            fields["last_sync_started_at"] = dto.last_sync_started_at
-        if dto.last_sync_completed_at is not None:
-            fields["last_sync_completed_at"] = dto.last_sync_completed_at
-        if dto.last_sync_status is not None:
-            fields["last_sync_status"] = dto.last_sync_status
-        if dto.last_sync_error is not None:
-            fields["last_sync_error"] = dto.last_sync_error
+
         if dto.last_token_refresh_at is not None:
             fields["last_token_refresh_at"] = dto.last_token_refresh_at
         if dto.token_refresh_count is not None:
@@ -260,16 +228,13 @@ class IdentityProviderConnectionRepository:
             identity_provider_id=row["identity_provider_id"],
             connected_by_user_id=row["connected_by_user_id"],
             status=row["status"],
-            access_token_encrypted=row["access_token_encrypted"],
-            refresh_token_encrypted=row["refresh_token_encrypted"],
+            access_token=row["access_token"],
+            refresh_token=row["refresh_token"],
             token_expires_at=row["token_expires_at"],
             scopes_granted=scopes or [],
             admin_email=row["admin_email"],
             workspace_domain=row["workspace_domain"],
-            last_sync_started_at=row["last_sync_started_at"],
-            last_sync_completed_at=row["last_sync_completed_at"],
-            last_sync_status=row["last_sync_status"],
-            last_sync_error=row["last_sync_error"],
+
             last_token_refresh_at=row["last_token_refresh_at"],
             token_refresh_count=row["token_refresh_count"],
             error_code=row["error_code"],

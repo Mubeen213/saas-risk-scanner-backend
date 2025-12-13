@@ -31,7 +31,7 @@ class WorkspaceUserRepository:
     async def find_by_id(self, user_id: int) -> WorkspaceUser | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM workspace_user
+            FROM identity_user
             WHERE id = :user_id
         """
         query, values = bind_named(query, {"user_id": user_id})
@@ -43,7 +43,7 @@ class WorkspaceUserRepository:
     ) -> WorkspaceUser | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM workspace_user
+            FROM identity_user
             WHERE organization_id = :organization_id 
               AND provider_user_id = :provider_user_id
         """
@@ -59,7 +59,7 @@ class WorkspaceUserRepository:
     ) -> WorkspaceUser | None:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM workspace_user
+            FROM identity_user
             WHERE organization_id = :organization_id 
               AND LOWER(email) = LOWER(:email)
         """
@@ -72,7 +72,7 @@ class WorkspaceUserRepository:
     async def find_by_organization(self, organization_id: int) -> list[WorkspaceUser]:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM workspace_user
+            FROM identity_user
             WHERE organization_id = :organization_id
             ORDER BY email
         """
@@ -83,7 +83,7 @@ class WorkspaceUserRepository:
     async def find_by_connection(self, connection_id: int) -> list[WorkspaceUser]:
         query = f"""
             SELECT {self._SELECT_FIELDS}
-            FROM workspace_user
+            FROM identity_user
             WHERE connection_id = :connection_id
             ORDER BY email
         """
@@ -95,7 +95,7 @@ class WorkspaceUserRepository:
         import json
 
         query = f"""
-            INSERT INTO workspace_user (
+            INSERT INTO identity_user (
                 organization_id, connection_id, provider_user_id, email,
                 full_name, given_name, family_name, is_admin, is_delegated_admin,
                 status, org_unit_path, avatar_url, raw_data, last_synced_at
@@ -165,7 +165,7 @@ class WorkspaceUserRepository:
             )
 
         query = """
-            INSERT INTO workspace_user (
+            INSERT INTO identity_user (
                 organization_id, connection_id, provider_user_id, email,
                 full_name, given_name, family_name, is_admin, is_delegated_admin,
                 status, org_unit_path, avatar_url, raw_data, last_synced_at
@@ -234,7 +234,7 @@ class WorkspaceUserRepository:
         if search_pattern:
             count_query = """
                 SELECT COUNT(*) as total
-                FROM workspace_user
+                FROM identity_user
                 WHERE organization_id = :organization_id
                   AND (email ILIKE :search OR full_name ILIKE :search)
             """
@@ -245,7 +245,7 @@ class WorkspaceUserRepository:
         else:
             count_query = """
                 SELECT COUNT(*) as total
-                FROM workspace_user
+                FROM identity_user
                 WHERE organization_id = :organization_id
             """
             count_query, count_values = bind_named(
@@ -260,9 +260,9 @@ class WorkspaceUserRepository:
                 SELECT 
                     wu.id, wu.email, wu.full_name, wu.avatar_url,
                     wu.is_admin, wu.is_delegated_admin, wu.status,
-                    COUNT(aa.id) FILTER (WHERE aa.status = 'active') as authorized_apps_count
-                FROM workspace_user wu
-                LEFT JOIN app_authorization aa ON aa.workspace_user_id = wu.id
+                    COUNT(g.id) FILTER (WHERE g.status = 'active') as authorized_apps_count
+                FROM identity_user wu
+                LEFT JOIN app_grant g ON g.user_id = wu.id
                 WHERE wu.organization_id = :organization_id
                   AND (wu.email ILIKE :search OR wu.full_name ILIKE :search)
                 GROUP BY wu.id
@@ -283,9 +283,9 @@ class WorkspaceUserRepository:
                 SELECT 
                     wu.id, wu.email, wu.full_name, wu.avatar_url,
                     wu.is_admin, wu.is_delegated_admin, wu.status,
-                    COUNT(aa.id) FILTER (WHERE aa.status = 'active') as authorized_apps_count
-                FROM workspace_user wu
-                LEFT JOIN app_authorization aa ON aa.workspace_user_id = wu.id
+                    COUNT(g.id) FILTER (WHERE g.status = 'active') as authorized_apps_count
+                FROM identity_user wu
+                LEFT JOIN app_grant g ON g.user_id = wu.id
                 WHERE wu.organization_id = :organization_id
                 GROUP BY wu.id
                 ORDER BY wu.email
@@ -318,7 +318,7 @@ class WorkspaceUserRepository:
     async def count_by_organization(self, organization_id: int) -> int:
         query = """
             SELECT COUNT(*) as count
-            FROM workspace_user
+            FROM identity_user
             WHERE organization_id = :organization_id
         """
         query, values = bind_named(query, {"organization_id": organization_id})
@@ -330,7 +330,7 @@ class WorkspaceUserRepository:
     ) -> UserWithAuthorizationsDTO | None:
         user_query = """
             SELECT id, email, full_name, avatar_url, is_admin, status, org_unit_path
-            FROM workspace_user
+            FROM identity_user
             WHERE id = :user_id AND organization_id = :organization_id
         """
         user_query, user_values = bind_named(
@@ -342,29 +342,24 @@ class WorkspaceUserRepository:
 
         auth_query = """
             SELECT 
-                da.id as app_id, da.display_name as app_name, da.client_id,
-                aa.scopes, aa.authorized_at, aa.status
-            FROM app_authorization aa
-            JOIN discovered_app da ON da.id = aa.discovered_app_id
-            WHERE aa.workspace_user_id = :user_id
-            ORDER BY aa.authorized_at DESC
+                oa.id as app_id, oa.name as app_name, oa.client_id,
+                g.scopes, g.granted_at as authorized_at, g.status
+            FROM app_grant g
+            JOIN oauth_app oa ON oa.id = g.app_id
+            WHERE g.user_id = :user_id
+            ORDER BY g.granted_at DESC
         """
         auth_query, auth_values = bind_named(auth_query, {"user_id": user_id})
         auth_rows = await self._conn.fetch(auth_query, *auth_values)
 
         authorizations = []
         for row in auth_rows:
-            scopes = row["scopes"]
-            if isinstance(scopes, str):
-                import json
-
-                scopes = json.loads(scopes)
             authorizations.append(
                 AuthorizationWithAppDTO(
                     app_id=row["app_id"],
                     app_name=row["app_name"],
                     client_id=row["client_id"],
-                    scopes=scopes or [],
+                    scopes=row["scopes"] or [],
                     authorized_at=row["authorized_at"],
                     status=row["status"],
                 )

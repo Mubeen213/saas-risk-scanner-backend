@@ -125,6 +125,16 @@ class UnifiedTokenEvent:
 
 
 @dataclass
+class UnifiedToken:
+    client_id: str
+    app_name: str
+    scopes: list[str]
+    user_email: str | None = None  # Populated during context enrichment if needed
+    is_system_app: bool = False
+    raw_data: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class SyncContext:
     connection_id: int
     organization_id: int

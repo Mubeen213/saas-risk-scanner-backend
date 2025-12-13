@@ -16,6 +16,7 @@ from app.integrations.core.types import (
     TokenResponse,
     UnifiedGroup,
     UnifiedGroupMembership,
+    UnifiedToken,
     UnifiedTokenEvent,
     UnifiedUser,
 )
@@ -24,6 +25,7 @@ from app.integrations.providers.google_workspace.adapters import (
     adapt_google_members,
     adapt_google_token_events,
     adapt_google_users,
+    adapt_google_user_tokens,
 )
 from app.integrations.providers.google_workspace.constants import (
     GOOGLE_GROUP_MEMBERS_ENDPOINT,
@@ -70,6 +72,9 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
                 group_key=params.get("group_key", "")
             ),
             SyncStep.TOKEN_EVENTS: GOOGLE_TOKEN_ACTIVITIES_ENDPOINT,
+            SyncStep.USER_TOKENS: GOOGLE_USER_TOKENS_ENDPOINT.format(
+                user_key=params.get("user_key", "")
+            ),
         }
 
         url = endpoints.get(step, GOOGLE_USERS_ENDPOINT)
@@ -198,6 +203,28 @@ class GoogleWorkspaceProvider(IWorkspaceProvider):
                 logger.debug(f"Fetched batch of {len(raw_events)} token events")
                 yield adapt_google_token_events(raw_events)
         logger.debug("Finished fetching token events")
+
+    async def fetch_user_tokens(
+        self, auth_context: AuthContext, user_id: str
+    ) -> AsyncGenerator[list[UnifiedToken], None]:
+        # Tokens endpoint is not paginated in the same way as others, usually returns all or has specific pagination?
+        # Google Directory API tokens.list doesn't seem to explicitly support pagination in the simple sense or it's rarely large.
+        # But we should respect if it does. Standard list usually has nextPageToken.
+        
+        logger.debug(f"Starting to fetch tokens for user: {user_id}")
+        request = self.get_request_definition(
+            SyncStep.USER_TOKENS, {"user_key": user_id}
+        )
+        # We can reuse a generic paginator or simple execution if pagination isn't critical or different.
+        # For safety, let's assume it might be paginated.
+        paginator = self.get_paginator(SyncStep.USER_TOKENS)
+
+        async with self._create_api_client(SyncStep.USER_TOKENS) as client:
+            async for raw_tokens in client.execute_paginated(
+                request, auth_context, paginator
+            ):
+                yield adapt_google_user_tokens(raw_tokens)
+        logger.debug(f"Finished fetching tokens for user: {user_id}")
 
     async def revoke_app_access(
         self, auth_context: AuthContext, user_id: str, client_id: str

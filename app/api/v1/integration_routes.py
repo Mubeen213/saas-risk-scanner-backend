@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 from app.core.dependencies import (
     CurrentUserDep,
     IntegrationServiceDep,
-    WorkspaceSyncServiceDep,
+    SyncManagerDep,
 )
 from app.core.settings import settings
 from app.integrations.core.exceptions import (
@@ -231,8 +231,8 @@ async def list_connections(
             admin_email=c.admin_email,
             workspace_domain=c.workspace_domain,
             scopes_granted=c.scopes_granted,
-            last_sync_completed_at=c.last_sync_completed_at,
-            last_sync_status=c.last_sync_status,
+            last_sync_completed_at=None,
+            last_sync_status=None,
             created_at=c.created_at,
             updated_at=c.updated_at,
         )
@@ -273,13 +273,13 @@ async def get_connection_by_id(
         response_data = ConnectionResponse(
             id=connection.id,
             organization_id=connection.organization_id,
-            provider_id=connection.provider_id,
+            identity_provider_id=connection.identity_provider_id,
             status=connection.status,
             admin_email=connection.admin_email,
             workspace_domain=connection.workspace_domain,
             scopes_granted=connection.scopes_granted,
-            last_sync_completed_at=connection.last_sync_completed_at,
-            last_sync_status=connection.last_sync_status,
+            last_sync_completed_at=None,
+            last_sync_status=None,
             created_at=connection.created_at,
             updated_at=connection.updated_at,
         )
@@ -299,7 +299,7 @@ async def trigger_sync(
     request: SyncRequest,
     current_user: CurrentUserDep,
     integration_service: IntegrationServiceDep,
-    sync_service: WorkspaceSyncServiceDep,
+    sync_manager: SyncManagerDep,
 ):
     logger.info(
         "Triggering sync for connection: %d, user: %d",
@@ -323,15 +323,15 @@ async def trigger_sync(
                 status_code=403,
             )
 
-        sync_status = await sync_service.sync_workspace(request.connection_id)
-
+        await sync_manager.run_full_sync(request.connection_id)
+        
         logger.info(
-            f"Sync completed for connection:{request.connection_id} with status: {sync_status.value}"
+            f"Sync triggered for connection:{request.connection_id}"
         )
         response_data = SyncResponse(
             connection_id=request.connection_id,
-            status=sync_status.value,
-            message="Sync completed successfully",
+            status="TRIGGERED",
+            message="Sync triggered successfully",
         )
         return create_success_response(data=response_data.model_dump())
 

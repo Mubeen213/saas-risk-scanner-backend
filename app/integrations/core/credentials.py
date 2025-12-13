@@ -44,20 +44,20 @@ class CredentialsManager(ICredentialsManager):
         if connection is None:
             raise ConnectionNotFoundError(connection_id)
 
-        if connection.access_token_encrypted is None:
+        if connection.access_token is None:
             raise TokenExpiredError(connection_id)
 
-        access_token = self._decrypt(connection.access_token_encrypted)
+        access_token = self._decrypt(connection.access_token)
         token_expires_at = connection.token_expires_at
 
         if self._is_token_expired(token_expires_at):
             logger.debug(
                 f"Token is expired for connection {connection_id}, refreshing..."
             )
-            if not connection.refresh_token_encrypted:
+            if not connection.refresh_token:
                 raise TokenExpiredError(connection_id)
 
-            decrypted_refresh = self._decrypt(connection.refresh_token_encrypted)
+            decrypted_refresh = self._decrypt(connection.refresh_token)
             access_token = await self._refresh_token(
                 connection_id, decrypted_refresh, client_id, client_secret
             )
@@ -82,8 +82,8 @@ class CredentialsManager(ICredentialsManager):
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
         dto = UpdateTokensDTO(
-            access_token_encrypted=encrypted_access,
-            refresh_token_encrypted=encrypted_refresh,
+            access_token=encrypted_access,
+            refresh_token=encrypted_refresh,
             token_expires_at=expires_at,
         )
         await self._connection_repository.update_tokens(connection_id, dto)

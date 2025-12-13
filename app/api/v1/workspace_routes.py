@@ -16,9 +16,9 @@ from app.schemas.workspace import (
     AppAuthorizationUserItemResponse,
     ConnectionInfoResponse,
     ConnectionSettingsResponse,
-    DiscoveredAppListItemResponse,
     DiscoveredAppsListResponse,
     GroupDetailResponse,
+    OAuthAppListItemResponse,
     GroupMemberItemResponse,
     UserAppAuthorizationItemResponse,
     UserDetailResponse,
@@ -209,16 +209,16 @@ async def get_discovered_apps(
     apps, total = await service.get_apps_paginated(current_user.organization_id, params)
 
     items = [
-        DiscoveredAppListItemResponse(
+        OAuthAppListItemResponse(
             id=app.id,
-            display_name=app.display_name,
+            name=app.name,
             client_id=app.client_id,
-            client_type=app.client_type,
-            status=app.status,
-            first_seen_at=app.first_seen_at,
-            last_seen_at=app.last_seen_at,
-            scopes_count=app.scopes_count,
-            authorized_users_count=app.authorized_users_count,
+            risk_score=app.risk_score,
+            is_system_app=app.is_system_app,
+            is_trusted=app.is_trusted,
+            scopes_summary=app.scopes_summary,
+            active_grants_count=app.active_grants_count,
+            last_activity_at=app.last_activity_at,
         )
         for app in apps
     ]
@@ -272,6 +272,34 @@ async def get_discovered_app_detail(
         authorizations=authorizations,
     )
     return create_success_response(data=response.model_dump(mode="json"))
+
+
+@router.get("/apps/{app_id}/timeline", response_model=ApiResponse)
+async def get_app_timeline(
+    app_id: int,
+    current_user: CurrentUserDep,
+    service: WorkspaceDataServiceDep,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+):
+    params = PaginationParamsDTO(page=page, page_size=page_size)
+    events, total = await service.get_app_timeline(
+        current_user.organization_id, app_id, params
+    )
+    
+    pagination = PaginationResponse(
+        page=page,
+        page_size=page_size,
+        total_items=total,
+        total_pages=math.ceil(total / page_size) if total > 0 else 0,
+    )
+    
+    return create_success_response(
+        data={
+            "items": [e.model_dump(mode="json") for e in events],
+            "pagination": pagination.model_dump(mode="json") 
+        }
+    )
 
 
 @router.get("/settings", response_model=ApiResponse)

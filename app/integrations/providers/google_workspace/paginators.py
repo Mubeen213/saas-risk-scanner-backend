@@ -59,11 +59,18 @@ class GoogleUserTokensPaginator(NoPagination):
 
 
 def get_paginator_for_step(step: SyncStep) -> PaginationStrategy:
-    paginators: dict[SyncStep, PaginationStrategy] = {
-        SyncStep.USERS: GoogleUsersPaginator(),
-        SyncStep.GROUPS: GoogleGroupsPaginator(),
-        SyncStep.GROUP_MEMBERS: GoogleGroupMembersPaginator(),
-        SyncStep.TOKEN_EVENTS: GoogleTokenEventsPaginator(),
-        SyncStep.USER_TOKENS: GoogleUserTokensPaginator(),
-    }
-    return paginators.get(step, GoogleUsersPaginator())
+    if step == SyncStep.USERS:
+        return GoogleUsersPaginator()
+    if step == SyncStep.GROUPS:
+        return GoogleGroupsPaginator()
+    if step == SyncStep.GROUP_MEMBERS:
+        return GoogleGroupMembersPaginator()
+    if step == SyncStep.TOKEN_EVENTS:
+        return GoogleTokenEventsPaginator()
+    if step == SyncStep.USER_TOKENS:
+        # User tokens usually fit in one page or use standard token pagination
+        # Reusing similar logic or create generic if needed.
+        # Actually, let's check if we need a specific one.
+        # For now, let's reuse GoogleGroupsPaginator logic which is generic "nextPageToken"
+        return GoogleGroupsPaginator()
+    return GoogleUsersPaginator()

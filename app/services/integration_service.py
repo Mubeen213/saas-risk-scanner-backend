@@ -227,8 +227,9 @@ class IntegrationService:
             identity_provider_id=identity_provider_id,
             connected_by_user_id=user_id,
             status=ConnectionStatus.ACTIVE.value,
-            access_token_encrypted=self._encrypt(tokens.access_token),
-            refresh_token_encrypted=(
+
+            access_token=self._encrypt(tokens.access_token),
+            refresh_token=(
                 self._encrypt(tokens.refresh_token) if tokens.refresh_token else None
             ),
             token_expires_at=expires_at,
@@ -253,8 +254,8 @@ class IntegrationService:
 
         dto = UpdateIdentityProviderConnectionDTO(
             status=ConnectionStatus.ACTIVE.value,
-            access_token_encrypted=self._encrypt(tokens.access_token),
-            refresh_token_encrypted=(
+            access_token=self._encrypt(tokens.access_token),
+            refresh_token=(
                 self._encrypt(tokens.refresh_token) if tokens.refresh_token else None
             ),
             token_expires_at=expires_at,

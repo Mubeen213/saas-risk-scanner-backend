@@ -43,20 +43,20 @@ class WorkspaceGroupsListResponse(BaseModel):
     pagination: PaginationResponse
 
 
-class DiscoveredAppListItemResponse(BaseModel):
+class OAuthAppListItemResponse(BaseModel):
     id: int
-    display_name: str | None
+    name: str
     client_id: str
-    client_type: str | None
-    status: str
-    first_seen_at: datetime
-    last_seen_at: datetime
-    scopes_count: int
-    authorized_users_count: int
+    risk_score: int
+    is_system_app: bool
+    is_trusted: bool
+    scopes_summary: list[str]
+    active_grants_count: int
+    last_activity_at: datetime | None
 
 
 class DiscoveredAppsListResponse(BaseModel):
-    items: list[DiscoveredAppListItemResponse]
+    items: list[OAuthAppListItemResponse]
     pagination: PaginationResponse
 
 
@@ -92,13 +92,15 @@ class AppAuthorizationUserItemResponse(BaseModel):
 
 class AppDetailResponse(BaseModel):
     id: int
-    display_name: str | None
+    name: str  # Renamed from display_name
     client_id: str
-    client_type: str | None
     status: str
+    risk_score: int
+    is_system_app: bool
+    is_trusted: bool
     all_scopes: list[str]
-    first_seen_at: datetime
-    last_seen_at: datetime
+    active_grants_count: int
+    last_activity_at: datetime | None
     authorizations: list[AppAuthorizationUserItemResponse]
 
 
