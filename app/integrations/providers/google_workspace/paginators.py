@@ -53,9 +53,15 @@ class GoogleTokenEventsPaginator(CursorPagination):
         )
 
 
-class GoogleUserTokensPaginator(NoPagination):
+class GoogleUserTokensPaginator(CursorPagination):
     def __init__(self):
-        super().__init__(items_key="items")
+        super().__init__(
+            cursor_response_key="nextPageToken",
+            cursor_request_param="pageToken",
+            items_key="items",
+            max_results_param="maxResults",
+            default_page_size=GOOGLE_DEFAULT_PAGE_SIZE,
+        )
 
 
 def get_paginator_for_step(step: SyncStep) -> PaginationStrategy:
@@ -68,9 +74,5 @@ def get_paginator_for_step(step: SyncStep) -> PaginationStrategy:
     if step == SyncStep.TOKEN_EVENTS:
         return GoogleTokenEventsPaginator()
     if step == SyncStep.USER_TOKENS:
-        # User tokens usually fit in one page or use standard token pagination
-        # Reusing similar logic or create generic if needed.
-        # Actually, let's check if we need a specific one.
-        # For now, let's reuse GoogleGroupsPaginator logic which is generic "nextPageToken"
-        return GoogleGroupsPaginator()
+        return GoogleUserTokensPaginator()
     return GoogleUsersPaginator()

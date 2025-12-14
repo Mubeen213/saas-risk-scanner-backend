@@ -35,6 +35,7 @@ from app.services.stream_service import StreamService
 from app.services.sync_manager import SyncManager
 from app.services.user_authentication_service import UserAuthenticationService
 from app.services.workspace_data_service import WorkspaceDataService
+from app.services.directory_service import DirectoryService
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,14 @@ def get_integration_service(
     )
 
 
+
+def get_directory_service(
+    user_repository: WorkspaceUserRepository = Depends(get_workspace_user_repository),
+    group_repository: WorkspaceGroupRepository = Depends(get_workspace_group_repository),
+) -> DirectoryService:
+    return DirectoryService(user_repository, group_repository)
+
+
 def get_snapshot_service(
     user_repository: WorkspaceUserRepository = Depends(get_workspace_user_repository),
     app_repo: OAuthAppRepository = Depends(get_oauth_app_repository),
@@ -172,19 +181,25 @@ def get_sync_manager(
     connection_repo: IdentityProviderConnectionRepository = Depends(
         get_identity_provider_connection_repository
     ),
+    identity_provider_repo: IdentityProviderRepository = Depends(
+        get_identity_provider_repository
+    ),
     auth_config_repo: ProductAuthConfigRepository = Depends(
         get_product_auth_config_repository
     ),
     crawl_repo: CrawlHistoryRepository = Depends(get_crawl_history_repository),
     credentials_manager: CredentialsManager = Depends(get_credentials_manager),
+    directory_service: DirectoryService = Depends(get_directory_service),
     snapshot_service: SnapshotService = Depends(get_snapshot_service),
     stream_service: StreamService = Depends(get_stream_service),
 ) -> SyncManager:
     return SyncManager(
         connection_repo,
+        identity_provider_repo,
         auth_config_repo,
         crawl_repo,
         credentials_manager,
+        directory_service,
         snapshot_service,
         stream_service,
     )

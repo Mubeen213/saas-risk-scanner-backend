@@ -55,6 +55,26 @@ async def validation_exception_handler(
     )
 
 
+from pydantic import ValidationError
+
+
+@app.exception_handler(ValidationError)
+async def pydantic_validation_exception_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
+    logger.exception(
+        "Pydantic Validation Error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return create_error_response(
+        code="INTERNAL_ERROR",
+        message="An internal data validation error occurred",
+        status_code=500,
+    )
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception(

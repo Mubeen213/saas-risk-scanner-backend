@@ -325,6 +325,17 @@ class WorkspaceUserRepository:
         row = await self._conn.fetchrow(query, *values)
         return row["count"] if row else 0
 
+
+    async def find_all_active_by_connection(self, connection_id: int) -> list[WorkspaceUser]:
+        query = f"""
+            SELECT {self._SELECT_FIELDS}
+            FROM identity_user
+            WHERE connection_id = :connection_id AND status = 'active'
+        """
+        query, values = bind_named(query, {"connection_id": connection_id})
+        rows = await self._conn.fetch(query, *values)
+        return [self._map_to_model(row) for row in rows if row]
+
     async def find_with_authorizations(
         self, organization_id: int, user_id: int
     ) -> UserWithAuthorizationsDTO | None:

@@ -23,15 +23,20 @@ class CrawlHistoryRepository(BaseRepository[CrawlHistory]):
             query,
             dto.organization_id,
             dto.connection_id,
-            dto.crawl_type,
-            dto.status,
+            dto.crawl_type.value,
+            dto.status.value,
             dto.started_at,
             None,
             None,
             json.dumps(dto.stats_json),
             json.dumps(dto.raw_debug_json),
         )
-        return CrawlHistory.model_validate(row)
+        data = dict(row)
+        if isinstance(data.get('stats_json'), str):
+            data['stats_json'] = json.loads(data['stats_json'])
+        if isinstance(data.get('raw_debug_json'), str):
+            data['raw_debug_json'] = json.loads(data['raw_debug_json'])
+        return CrawlHistory.model_validate(data)
 
     async def update(self, id: int, dto: UpdateCrawlHistoryDTO) -> CrawlHistory | None:
         update_data = dto.model_dump(exclude_unset=True)
@@ -45,6 +50,9 @@ class CrawlHistoryRepository(BaseRepository[CrawlHistory]):
         for key, value in update_data.items():
             if key in ('stats_json', 'raw_debug_json') and isinstance(value, dict):
                 value = json.dumps(value)
+            # Handle Enum serialization
+            if hasattr(value, "value"):
+                value = value.value
             
             set_clauses.append(f"{key} = ${idx}")
             values.append(value)
@@ -59,4 +67,37 @@ class CrawlHistoryRepository(BaseRepository[CrawlHistory]):
         """
         
         row = await self.conn.fetchrow(query, *values)
-        return CrawlHistory.model_validate(row) if row else None
+        if not row:
+            return None
+            
+        data = dict(row)
+        if isinstance(data.get('stats_json'), str):
+            data['stats_json'] = json.loads(data['stats_json'])
+        if isinstance(data.get('raw_debug_json'), str):
+            data['raw_debug_json'] = json.loads(data['raw_debug_json'])
+            
+        return CrawlHistory.model_validate(data)
+
+    async def find_last_successful_crawl(
+        self, connection_id: int, crawl_type: str
+    ) -> CrawlHistory | None:
+        query = """
+            SELECT *
+            FROM crawl_history
+            WHERE connection_id = $1 
+              AND crawl_type = $2 
+              AND status = 'success'
+            ORDER BY finished_at DESC
+            LIMIT 1
+        """
+        row = await self.conn.fetchrow(query, connection_id, crawl_type)
+        if not row:
+            return None
+            
+        data = dict(row)
+        if isinstance(data.get('stats_json'), str):
+            data['stats_json'] = json.loads(data['stats_json'])
+        if isinstance(data.get('raw_debug_json'), str):
+            data['raw_debug_json'] = json.loads(data['raw_debug_json'])
+            
+        return CrawlHistory.model_validate(data)

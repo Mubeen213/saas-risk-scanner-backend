@@ -49,6 +49,7 @@ class SnapshotService:
                 auth_context, user.provider_user_id
             ):
                 for token in tokens:
+                    logger.info(f"Processing token for user {user.id}: {token.client_id} - {token.app_name}")
                     await self._process_token(connection, user.id, token)
                     total_tokens += 1
         

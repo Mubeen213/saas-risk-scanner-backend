@@ -34,6 +34,7 @@ from app.integrations.providers.google_workspace.constants import (
     GOOGLE_RATE_LIMITS,
     GOOGLE_TOKEN_ACTIVITIES_ENDPOINT,
     GOOGLE_USERS_ENDPOINT,
+    GOOGLE_USER_TOKENS_ENDPOINT,
     GOOGLE_WORKSPACE_PROVIDER_SLUG,
 )
 from app.integrations.providers.google_workspace.paginators import (

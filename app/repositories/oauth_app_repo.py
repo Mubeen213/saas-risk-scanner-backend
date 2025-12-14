@@ -10,6 +10,19 @@ from .base_repository import BaseRepository
 class OAuthAppRepository(BaseRepository[OAuthApp]):
     def __init__(self, conn):
         super().__init__(conn, OAuthApp)
+        self._table_name = "oauth_app"
+
+    async def find_by_id(self, id: int) -> OAuthApp | None:
+        query = f"SELECT * FROM {self._table_name} WHERE id = $1"
+        row = await self.conn.fetchrow(query, id)
+        if not row:
+            return None
+            
+        data = dict(row)
+        if isinstance(data.get('raw_data'), str):
+            import json
+            data['raw_data'] = json.loads(data['raw_data'])
+        return OAuthApp.model_validate(data)
 
     async def upsert(self, dto: CreateOAuthAppDTO) -> OAuthApp:
         query = """
@@ -41,7 +54,15 @@ class OAuthAppRepository(BaseRepository[OAuthApp]):
             dto.image_url,
             json.dumps(dto.raw_data),
         )
-        return OAuthApp.model_validate(row)
+        data = dict(row)
+        if isinstance(data.get('raw_data'), str):
+            data['raw_data'] = json.loads(data['raw_data'])
+        
+        result_app = OAuthApp.model_validate(data)
+        # import logging
+        # logger = logging.getLogger(__name__)
+        # logger.info(f"Upserted app: {result_app.id} - {result_app.name} ({result_app.client_id})")
+        return result_app
 
     async def find_paginated_with_stats(
         self, organization_id: int, limit: int, offset: int, search: str | None = None

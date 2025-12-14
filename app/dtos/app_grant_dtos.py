@@ -25,7 +25,7 @@ class AppGrantResponseDTO(BaseModel):
     app_id: int
     status: str
     scopes: list[str]
-    granted_at: datetime
+    granted_at: datetime | None
     revoked_at: datetime | None
     last_accessed_at: datetime | None
     created_at: datetime

@@ -43,7 +43,10 @@ class AppGrantRepository(BaseRepository[AppGrant]):
             dto.last_accessed_at,
             json.dumps(dto.raw_data),
         )
-        return AppGrant.model_validate(row)
+        data = dict(row)
+        if isinstance(data.get('raw_data'), str):
+            data['raw_data'] = json.loads(data['raw_data'])
+        return AppGrant.model_validate(data)
 
     async def count_active_by_organization(self, organization_id: int) -> int:
         query = """
@@ -68,7 +71,7 @@ class AppGrantRepository(BaseRepository[AppGrant]):
                 g.granted_at as authorized_at,
                 g.status
             FROM app_grant g
-            JOIN workspace_user u ON u.id = g.user_id
+            JOIN identity_user u ON u.id = g.user_id
             WHERE g.organization_id = $1 AND g.app_id = $2
             ORDER BY g.granted_at DESC
         """
@@ -90,4 +93,9 @@ class AppGrantRepository(BaseRepository[AppGrant]):
     async def find_by_app_and_user(self, app_id: int, user_id: int) -> AppGrant | None:
         query = "SELECT * FROM app_grant WHERE app_id = $1 AND user_id = $2"
         row = await self.conn.fetchrow(query, app_id, user_id)
-        return AppGrant.model_validate(row) if row else None
+        if not row:
+            return None
+        data = dict(row)
+        if isinstance(data.get('raw_data'), str):
+            data['raw_data'] = json.loads(data['raw_data'])
+        return AppGrant.model_validate(data)

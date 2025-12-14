@@ -65,7 +65,7 @@ class UserAppAuthorizationItemResponse(BaseModel):
     app_name: str | None
     client_id: str
     scopes: list[str]
-    authorized_at: datetime
+    authorized_at: datetime | None
     status: str
 
 
@@ -86,7 +86,7 @@ class AppAuthorizationUserItemResponse(BaseModel):
     full_name: str | None
     avatar_url: str | None
     scopes: list[str]
-    authorized_at: datetime
+    authorized_at: datetime | None
     status: str
 
 
@@ -94,6 +94,7 @@ class AppDetailResponse(BaseModel):
     id: int
     name: str  # Renamed from display_name
     client_id: str
+    client_type: str | None = None
     status: str
     risk_score: int
     is_system_app: bool

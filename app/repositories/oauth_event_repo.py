@@ -30,7 +30,10 @@ class OAuthEventRepository(BaseRepository[OAuthEvent]):
             dto.event_time,
             json.dumps(dto.raw_data),
         )
-        return OAuthEvent.model_validate(row)
+        data = dict(row)
+        if isinstance(data.get('raw_data'), str):
+            data['raw_data'] = json.loads(data['raw_data'])
+        return OAuthEvent.model_validate(data)
 
     async def find_paginated_by_app(
         self, organization_id: int, app_id: int, limit: int, offset: int
@@ -44,7 +47,7 @@ class OAuthEventRepository(BaseRepository[OAuthEvent]):
                 u.full_name as actor_name,
                 u.avatar_url as actor_avatar_url
             FROM oauth_event e
-            LEFT JOIN workspace_user u ON e.user_id = u.id
+            LEFT JOIN identity_user u ON e.user_id = u.id
             WHERE e.organization_id = $1 AND e.app_id = $2
             ORDER BY e.event_time DESC
             LIMIT $3 OFFSET $4

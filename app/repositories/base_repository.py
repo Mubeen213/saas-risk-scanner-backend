@@ -27,12 +27,12 @@ class BaseRepository(Generic[T]):
     async def find_by_id(self, id: int) -> T | None:
         query = f"SELECT * FROM {self._table_name} WHERE id = $1"
         row = await self.conn.fetchrow(query, id)
-        return self.model_cls.model_validate(row) if row else None
+        return self.model_cls.model_validate(dict(row)) if row else None
         
     async def find_all(self) -> list[T]:
         query = f"SELECT * FROM {self._table_name}"
         rows = await self.conn.fetch(query)
-        return [self.model_cls.model_validate(row) for row in rows]
+        return [self.model_cls.model_validate(dict(row)) for row in rows]
     
     async def delete(self, id: int) -> bool:
         query = f"DELETE FROM {self._table_name} WHERE id = $1"
