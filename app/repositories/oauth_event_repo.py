@@ -36,11 +36,11 @@ class OAuthEventRepository(BaseRepository[OAuthEvent]):
         return OAuthEvent.model_validate(data)
 
     async def find_paginated_by_app(
-        self, organization_id: int, app_id: int, limit: int, offset: int
+        self, organization_id: int, app_id: int, limit: int, offset: int, user_id: int | None = None
     ) -> list[OAuthEventResponseDTO]:
         # Returns raw dicts for DTO mapping
         # Joining with workspace_user to get actor details
-        query = """
+        base_query = """
             SELECT 
                 e.*,
                 u.email as actor_email,
@@ -49,12 +49,25 @@ class OAuthEventRepository(BaseRepository[OAuthEvent]):
             FROM oauth_event e
             LEFT JOIN identity_user u ON e.user_id = u.id
             WHERE e.organization_id = $1 AND e.app_id = $2
-            ORDER BY e.event_time DESC
-            LIMIT $3 OFFSET $4
         """
-        rows = await self.conn.fetch(query, organization_id, app_id, limit, offset)
+        args = [organization_id, app_id]
+        
+        if user_id is not None:
+            base_query += f" AND e.user_id = ${len(args) + 1}"
+            args.append(user_id)
+            
+        base_query += f" ORDER BY e.event_time DESC LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}"
+        args.extend([limit, offset])
+
+        rows = await self.conn.fetch(base_query, *args)
         return [OAuthEventResponseDTO(**dict(row)) for row in rows]
 
-    async def count_by_app(self, organization_id: int, app_id: int) -> int:
+    async def count_by_app(self, organization_id: int, app_id: int, user_id: int | None = None) -> int:
         query = "SELECT COUNT(*) FROM oauth_event WHERE organization_id = $1 AND app_id = $2"
-        return await self.conn.fetchval(query, organization_id, app_id)
+        args = [organization_id, app_id]
+        
+        if user_id is not None:
+            query += f" AND user_id = ${len(args) + 1}"
+            args.append(user_id)
+            
+        return await self.conn.fetchval(query, *args)

@@ -124,15 +124,16 @@ class WorkspaceDataService:
         )
 
     async def get_app_timeline(
-        self, organization_id: int, app_id: int, params: PaginationParamsDTO
+        self, organization_id: int, app_id: int, params: PaginationParamsDTO, user_id: int | None = None
     ) -> tuple[list[OAuthEventResponseDTO], int]:
         dtos = await self._event_repo.find_paginated_by_app(
             organization_id, 
             app_id, 
             params.page_size, 
-            (params.page - 1) * params.page_size
+            (params.page - 1) * params.page_size,
+            user_id
         )
-        total = await self._event_repo.count_by_app(organization_id, app_id)
+        total = await self._event_repo.count_by_app(organization_id, app_id, user_id)
         
         return dtos, total
 

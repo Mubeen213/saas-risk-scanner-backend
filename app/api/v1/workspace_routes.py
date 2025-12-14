@@ -286,10 +286,11 @@ async def get_app_timeline(
     service: WorkspaceDataServiceDep,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
+    user_id: int | None = Query(None),
 ):
     params = PaginationParamsDTO(page=page, page_size=page_size)
     events, total = await service.get_app_timeline(
-        current_user.organization_id, app_id, params
+        current_user.organization_id, app_id, params, user_id
     )
     
     pagination = PaginationResponse(
