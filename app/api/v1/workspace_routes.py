@@ -248,7 +248,35 @@ async def get_discovered_app_detail(
             status_code=404,
         )
 
-    return create_success_response(data=app.model_dump(mode="json"))
+    authorizations = [
+        AppAuthorizationUserItemResponse(
+            user_id=auth.user_id,
+            email=auth.email,
+            full_name=auth.full_name,
+            avatar_url=auth.avatar_url,
+            scopes=auth.scopes,
+            authorized_at=auth.authorized_at,
+            status=auth.status,
+        )
+        for auth in app.authorizations
+    ]
+
+    response = AppDetailResponse(
+        id=app.id,
+        name=app.name,
+        client_id=app.client_id,
+        client_type=None,
+        status=app.status,
+        risk_score=app.risk_score,
+        is_system_app=app.is_system_app,
+        is_trusted=app.is_trusted,
+        all_scopes=app.all_scopes,
+        active_grants_count=app.active_grants_count,
+        last_activity_at=app.last_activity_at,
+        authorizations=authorizations,
+    )
+
+    return create_success_response(data=response.model_dump(mode="json"))
 
 
 @router.get("/apps/{app_id}/timeline", response_model=ApiResponse)

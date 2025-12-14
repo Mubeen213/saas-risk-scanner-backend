@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from app.dtos.oauth_app_dtos import CreateOAuthAppDTO
+from app.dtos.oauth_app_dtos import CreateOAuthAppDTO, OAuthAppWithStatsDTO
 from app.models.oauth_app import OAuthApp
 
 from .base_repository import BaseRepository
@@ -66,7 +66,7 @@ class OAuthAppRepository(BaseRepository[OAuthApp]):
 
     async def find_paginated_with_stats(
         self, organization_id: int, limit: int, offset: int, search: str | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[OAuthAppWithStatsDTO]:
         # Returns raw dicts to be mapped to OAuthAppWithStatsDTO by service
         # Using LEFT JOIN on app_grant to count active users
         params = [organization_id, limit, offset]
@@ -89,7 +89,10 @@ class OAuthAppRepository(BaseRepository[OAuthApp]):
             LIMIT $2 OFFSET $3
         """
         rows = await self.conn.fetch(query, *params)
-        return [dict(row) for row in rows]
+        return [
+            OAuthAppWithStatsDTO(**dict(row))
+            for row in rows
+        ]
 
     async def count_by_organization(self, organization_id: int) -> int:
         query = "SELECT COUNT(*) FROM oauth_app WHERE organization_id = $1"

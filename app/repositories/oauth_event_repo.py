@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from app.dtos.oauth_event_dtos import CreateOAuthEventDTO
+from app.dtos.oauth_event_dtos import CreateOAuthEventDTO, OAuthEventResponseDTO
 from app.models.oauth_event import OAuthEvent
 
 from .base_repository import BaseRepository
@@ -37,7 +37,7 @@ class OAuthEventRepository(BaseRepository[OAuthEvent]):
 
     async def find_paginated_by_app(
         self, organization_id: int, app_id: int, limit: int, offset: int
-    ) -> list[dict[str, Any]]:
+    ) -> list[OAuthEventResponseDTO]:
         # Returns raw dicts for DTO mapping
         # Joining with workspace_user to get actor details
         query = """
@@ -53,7 +53,7 @@ class OAuthEventRepository(BaseRepository[OAuthEvent]):
             LIMIT $3 OFFSET $4
         """
         rows = await self.conn.fetch(query, organization_id, app_id, limit, offset)
-        return [dict(row) for row in rows]
+        return [OAuthEventResponseDTO(**dict(row)) for row in rows]
 
     async def count_by_app(self, organization_id: int, app_id: int) -> int:
         query = "SELECT COUNT(*) FROM oauth_event WHERE organization_id = $1 AND app_id = $2"

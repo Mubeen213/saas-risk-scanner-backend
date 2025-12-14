@@ -24,4 +24,3 @@ class OAuthEventResponseDTO(BaseModel):
     actor_email: str | None = None
     actor_name: str | None = None
     actor_avatar_url: str | None = None
-    raw_data: dict[str, Any]

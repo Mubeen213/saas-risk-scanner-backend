@@ -47,7 +47,7 @@ class AuthorizationWithAppDTO(BaseModel):
     app_name: str | None
     client_id: str
     scopes: list[str]
-    authorized_at: datetime
+    authorized_at: datetime | None = None
     status: str
 
 
@@ -57,7 +57,7 @@ class AuthorizationWithUserDTO(BaseModel):
     full_name: str | None
     avatar_url: str | None
     scopes: list[str]
-    authorized_at: datetime
+    authorized_at: datetime | None = None
     status: str
 
 
@@ -82,13 +82,15 @@ class UserWithAuthorizationsDTO(BaseModel):
 
 class AppWithAuthorizationsDTO(BaseModel):
     id: int
-    display_name: str | None
+    name: str
     client_id: str
-    client_type: str | None
+    risk_score: int
+    is_system_app: bool
+    is_trusted: bool
     status: str
     all_scopes: list[str]
-    first_seen_at: datetime
-    last_seen_at: datetime
+    active_grants_count: int
+    last_activity_at: datetime | None
     authorizations: list[AuthorizationWithUserDTO]
 
 

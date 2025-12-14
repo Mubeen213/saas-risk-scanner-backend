@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from app.dtos.app_grant_dtos import CreateAppGrantDTO
+from app.dtos.workspace_dtos import AuthorizationWithUserDTO
 from app.models.app_grant import AppGrant
 
 from .base_repository import BaseRepository
@@ -58,8 +59,7 @@ class AppGrantRepository(BaseRepository[AppGrant]):
 
     async def find_by_app_with_users(
         self, organization_id: int, app_id: int
-    ) -> list[Any]:
-        from app.schemas.workspace import AppAuthorizationUserItemResponse
+    ) -> list[AuthorizationWithUserDTO]:
         
         query = """
             SELECT 
@@ -78,7 +78,7 @@ class AppGrantRepository(BaseRepository[AppGrant]):
         rows = await self.conn.fetch(query, organization_id, app_id)
         
         return [
-            AppAuthorizationUserItemResponse(
+            AuthorizationWithUserDTO(
                 user_id=row["user_id"],
                 email=row["email"],
                 full_name=row["full_name"],
