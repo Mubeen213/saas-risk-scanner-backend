@@ -13,6 +13,7 @@ from app.dtos.workspace_dtos import (
 from app.dtos.oauth_app_dtos import OAuthAppWithStatsDTO
 from app.dtos.oauth_event_dtos import OAuthEventResponseDTO
 from app.repositories.app_grant_repo import AppGrantRepository
+from app.repositories.crawl_history_repo import CrawlHistoryRepository
 from app.repositories.oauth_app_repo import OAuthAppRepository
 from app.repositories.oauth_event_repo import OAuthEventRepository
 from app.repositories.identity_provider_connection_repository import (
@@ -33,6 +34,7 @@ class WorkspaceDataService:
         oauth_app_repo: OAuthAppRepository,
         app_grant_repo: AppGrantRepository,
         oauth_event_repo: OAuthEventRepository,
+        crawl_history_repo: CrawlHistoryRepository,
     ):
         self._connection_repo = connection_repository
         self._user_repo = workspace_user_repository
@@ -40,6 +42,7 @@ class WorkspaceDataService:
         self._app_repo = oauth_app_repo
         self._grant_repo = app_grant_repo
         self._event_repo = oauth_event_repo
+        self._crawl_history_repo = crawl_history_repo
 
     async def get_workspace_stats(self, organization_id: int) -> WorkspaceStatsDTO:
         total_users = await self._user_repo.count_by_organization(organization_id)
@@ -158,13 +161,18 @@ class WorkspaceDataService:
         is_syncing = False
         can_sync = connection.status == "active"
 
+        last_crawl = await self._crawl_history_repo.find_last_crawl(connection.id)
+        last_sync_completed_at = last_crawl.finished_at if last_crawl else None
+        last_sync_status = last_crawl.status.value if last_crawl else None
+        is_syncing = last_crawl.status.value == "running" if last_crawl else False
+
         return ConnectionSettingsDTO(
             connection_id=connection.id,
             status=connection.status,
             admin_email=connection.admin_email,
             workspace_domain=connection.workspace_domain,
-            last_sync_completed_at=None,
-            last_sync_status=None,
+            last_sync_completed_at=last_sync_completed_at,
+            last_sync_status=last_sync_status,
             can_sync=can_sync,
             is_syncing=is_syncing,
         )

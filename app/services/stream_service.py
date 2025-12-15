@@ -77,16 +77,30 @@ class StreamService:
         app = await self._app_repo.upsert(app_dto)
 
         # 3. Log Event (Immutable Timeline)
-        event_dto = CreateOAuthEventDTO(
+        # Check for duplicates before creating
+        event_time = event.event_time or datetime.now(timezone.utc)
+        
+        exists = await self._event_repo.exists(
             organization_id=connection.organization_id,
-            connection_id=connection.id,
             user_id=user.id,
             app_id=app.id,
             event_type=event.event_type,
-            event_time=event.event_time or datetime.now(timezone.utc),
-            raw_data=event.raw_data,
+            event_time=event_time
         )
-        await self._event_repo.create(event_dto)
+
+        if not exists:
+            event_dto = CreateOAuthEventDTO(
+                organization_id=connection.organization_id,
+                connection_id=connection.id,
+                user_id=user.id,
+                app_id=app.id,
+                event_type=event.event_type,
+                event_time=event_time,
+                raw_data=event.raw_data,
+            )
+            await self._event_repo.create(event_dto)
+        else:
+            logger.info(f"Skipping duplicate event: {event.event_type} for user {user.id} app {app.id} at {event_time}")
 
         # 4. Update Current State (AppGrant)
         # "Hybrid Sync": Events also update the 'now' state.
@@ -97,6 +111,10 @@ class StreamService:
             status = "revoked"
             revoked_at = event.event_time
         
+        granted_at = None
+        if event.event_type == "authorize":
+            granted_at = event.event_time
+
         grant_dto = CreateAppGrantDTO(
             organization_id=connection.organization_id,
             connection_id=connection.id,
@@ -104,6 +122,7 @@ class StreamService:
             app_id=app.id,
             status=status,
             scopes=event.scopes,
+            granted_at=granted_at,
             last_accessed_at=event.event_time, # Activity or Auth implies access
             revoked_at=revoked_at,
             raw_data=event.raw_data,

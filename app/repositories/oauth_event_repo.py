@@ -35,6 +35,33 @@ class OAuthEventRepository(BaseRepository[OAuthEvent]):
             data['raw_data'] = json.loads(data['raw_data'])
         return OAuthEvent.model_validate(data)
 
+    async def exists(
+        self, 
+        organization_id: int, 
+        user_id: int, 
+        app_id: int, 
+        event_type: str, 
+        event_time: Any
+    ) -> bool:
+        query = """
+            SELECT EXISTS(
+                SELECT 1 FROM oauth_event 
+                WHERE organization_id = $1 
+                AND user_id = $2 
+                AND app_id = $3 
+                AND event_type = $4 
+                AND event_time = $5
+            )
+        """
+        return await self.conn.fetchval(
+            query, 
+            organization_id, 
+            user_id, 
+            app_id, 
+            event_type, 
+            event_time
+        )
+
     async def find_paginated_by_app(
         self, organization_id: int, app_id: int, limit: int, offset: int, user_id: int | None = None
     ) -> list[OAuthEventResponseDTO]:

@@ -139,13 +139,14 @@ class SyncManager:
         )
         
         start_time = None
+        logger.info(f"Last sync for connection {connection.id} was {last_sync}")
         if last_sync and last_sync.finished_at:
              # Add buffer or use exact timestamp? Typically exact or slightly overlapping is safer.
              # Using exact finished_at of last sync as start time, or if provider supports state, use that.
              # For Google Workspace, startTime is RFC3339.
              start_time = last_sync.finished_at.isoformat()
         else:
-             start_time = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat() # Default lookback
+             start_time = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat() # Default lookback
                 
         count = await self._stream_service.sync_events_for_connection(connection, auth_context, start_time)
         return {"processed_events": count}

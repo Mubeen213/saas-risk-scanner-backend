@@ -332,6 +332,7 @@ def get_workspace_data_service(
     oauth_app_repo: OAuthAppRepository = Depends(get_oauth_app_repository),
     app_grant_repo: AppGrantRepository = Depends(get_app_grant_repository),
     oauth_event_repo: OAuthEventRepository = Depends(get_oauth_event_repository),
+    crawl_history_repo: CrawlHistoryRepository = Depends(get_crawl_history_repository),
 ) -> WorkspaceDataService:
     return WorkspaceDataService(
         connection_repository=connection_repository,
@@ -340,6 +341,7 @@ def get_workspace_data_service(
         oauth_app_repo=oauth_app_repo,
         app_grant_repo=app_grant_repo,
         oauth_event_repo=oauth_event_repo,
+        crawl_history_repo=crawl_history_repo,
     )
 
 

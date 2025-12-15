@@ -101,3 +101,23 @@ class CrawlHistoryRepository(BaseRepository[CrawlHistory]):
             data['raw_debug_json'] = json.loads(data['raw_debug_json'])
             
         return CrawlHistory.model_validate(data)
+
+    async def find_last_crawl(self, connection_id: int) -> CrawlHistory | None:
+        query = """
+            SELECT *
+            FROM crawl_history
+            WHERE connection_id = $1
+            ORDER BY started_at DESC
+            LIMIT 1
+        """
+        row = await self.conn.fetchrow(query, connection_id)
+        if not row:
+            return None
+            
+        data = dict(row)
+        if isinstance(data.get('stats_json'), str):
+            data['stats_json'] = json.loads(data['stats_json'])
+        if isinstance(data.get('raw_debug_json'), str):
+            data['raw_debug_json'] = json.loads(data['raw_debug_json'])
+            
+        return CrawlHistory.model_validate(data)
