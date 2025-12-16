@@ -358,7 +358,7 @@ class WorkspaceUserRepository:
             FROM app_grant g
             JOIN oauth_app oa ON oa.id = g.app_id
             WHERE g.user_id = :user_id
-            ORDER BY g.granted_at DESC
+            ORDER BY g.granted_at DESC NULLS LAST
         """
         auth_query, auth_values = bind_named(auth_query, {"user_id": user_id})
         auth_rows = await self._conn.fetch(auth_query, *auth_values)
