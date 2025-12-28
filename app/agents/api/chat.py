@@ -1,31 +1,34 @@
-import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-
-from app.agents.dependencies import get_chat_service
-from app.agents.dtos.chat import ChatMessageDTO
-from app.agents.schemas.chat import ChatMessageRequest
-from app.agents.services.chat_service import ChatService
-
-
-logger = logging.getLogger(__name__)
+from pydantic import BaseModel
+from app.agents.chat_agent import get_chat_agent
+import json
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-@router.post("/")
-async def chat(
-    request: ChatMessageRequest,
-    chat_service: ChatService = Depends(get_chat_service),
-) -> StreamingResponse:
-    payload = ChatMessageDTO(
-        organization_id=1,
-        user_id=1,
-        message=request.message,
-        thread_id=request.thread_id,
-    )
+class ChatRequest(BaseModel):
+    message: str
+    thread_id: str | None = None
 
+
+async def stream_sse(message: str, thread_id: str):
+    """Stream Server-Sent Events to client."""
+    agent = get_chat_agent()
+    async for event in agent.stream_events(message, thread_id):
+        data = {"type": event.type.value, "data": event.data}
+        yield f"data: {json.dumps(data)}\n\n"
+
+
+@router.post("/")
+async def chat(request: ChatRequest):
     return StreamingResponse(
-        chat_service.stream_response(payload),
+        stream_sse(request.message, request.thread_id or "default"),
         media_type="text/event-stream",
     )
+
+
+@router.post("/run")
+async def chat_run(request: ChatRequest):
+    response = await get_chat_agent().run(request.message, request.thread_id or "default")
+    return {"response": response}

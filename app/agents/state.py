@@ -4,9 +4,6 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 
-class BaseAgentState(TypedDict):
+class AgentState(TypedDict):
+    """Base agent state with messages."""
     messages: Annotated[Sequence[BaseMessage], add_messages]
-
-
-class ConversationState(BaseAgentState):
-    summary: str
