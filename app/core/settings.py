@@ -28,6 +28,16 @@ class Settings(BaseSettings):
 
     encryption_key: str = ""
 
+    # LLM Configuration - just use plain strings, factory handles the enums
+    llm_provider: str = "google"
+    llm_id: str = "gemini-2.5-flash"
+    
+    # Provider API keys
+    aws_region: str = "us-east-1"
+    google_api_key: str = ""
+    anthropic_api_key: str = ""
+    openai_api_key: str = ""
+
     backend_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:5173"
     allowed_redirect_uris: str = (

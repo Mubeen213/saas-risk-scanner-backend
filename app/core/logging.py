@@ -27,3 +27,14 @@ def setup_logging(level: str = "INFO") -> None:
     )
 
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
+    logging.getLogger("botocore").setLevel(logging.WARNING)
+    logging.getLogger("boto3").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("langchain").setLevel(logging.WARNING)
+    logging.getLogger("langchain_core").setLevel(logging.WARNING)
+    logging.getLogger("langchain_aws").setLevel(logging.WARNING)
+    logging.getLogger("langgraph").setLevel(logging.WARNING)
+
